@@ -1,46 +1,87 @@
+/* Default Light Mode */
 :root {
     --bg-color: #f0f2f5;
     --grid-bg: #ffffff;
-    --line-color: #6d28d9;
+    --text-color: #333333;
     --node-color: #1e1b4b;
-    --text-color: #ffffff;
+    --line-color: #6d28d9;
     --accent: #4f46e5;
+    --btn-bg: #e5e7eb;
+    --btn-text: #374151;
+}
+
+/* Dark Mode */
+body.dark-mode {
+    --bg-color: #111827;
+    --grid-bg: #1f2937;
+    --text-color: #f3f4f6;
+    --node-color: #c7d2fe;
+    --btn-bg: #374151;
+    --btn-text: #f3f4f6;
 }
 
 body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     background-color: var(--bg-color);
+    color: var(--text-color);
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     height: 100vh;
     margin: 0;
-    overflow: hidden; /* Prevent scrolling while dragging */
+    overflow: hidden;
     user-select: none;
     touch-action: none;
+    transition: background-color 0.3s ease;
 }
 
 header {
     text-align: center;
     margin-bottom: 15px;
     width: 100%;
+    position: relative;
 }
 
 h1 { 
     margin: 0 0 10px 0; 
-    color: #333; 
+    color: var(--text-color); 
     font-size: 2.5rem;
     letter-spacing: 2px;
 }
 
 #stats {
     display: flex;
-    justify-content: center; /* Centered */
+    justify-content: center;
     gap: 30px;
     font-size: 1.2rem;
     font-weight: bold;
-    color: #4b5563;
+    color: var(--text-color);
+    opacity: 0.8;
+}
+
+/* Theme Toggle Button */
+#theme-toggle {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background-color: var(--grid-bg);
+    color: var(--text-color);
+    border: 2px solid var(--btn-bg);
+    border-radius: 50%;
+    width: 60px;
+    height: 60px;
+    font-size: 1.8rem;
+    cursor: pointer;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    transition: transform 0.2s, background-color 0.3s;
+}
+#theme-toggle:hover {
+    transform: scale(1.1) rotate(15deg);
 }
 
 #game-wrapper {
@@ -48,17 +89,15 @@ h1 {
     background: var(--grid-bg);
     padding: 10px;
     border-radius: 15px;
-    box-shadow: 0 10px 25px rgba(0,0,0,0.1);
-    
-    /* Responsive Sizing */
+    box-shadow: 0 10px 25px rgba(0,0,0,0.2);
     width: 90vw; 
     height: 90vw;
     max-width: 500px;
     max-height: 500px;
-    
     display: flex;
     align-items: center;
     justify-content: center;
+    transition: background-color 0.3s ease;
 }
 
 canvas {
@@ -76,6 +115,7 @@ canvas {
     margin-top: 15px;
     font-size: 1.1rem;
     text-align: center;
+    min-height: 30px;
 }
 
 #ui-controls {
@@ -98,4 +138,4 @@ button {
 button:active { transform: scale(0.95); }
 
 .btn-primary { background-color: var(--accent); color: white; }
-.btn-secondary { background-color: #e5e7eb; color: #374151; }
+.btn-secondary { background-color: var(--btn-bg); color: var(--btn-text); }

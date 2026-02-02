@@ -8,6 +8,26 @@
 </head>
 <body>
 
+    <button id="theme-toggle" title="Toggle Dark Mode">🌙</button>
+
+    <div id="rules-container">
+        <div id="rules-panel">
+            <div class="rule-item">
+                <div class="rule-icon">1-2-3</div>
+                <div class="rule-text">Connect numbers in order</div>
+            </div>
+            <div class="rule-item">
+                <div class="rule-icon">▧</div>
+                <div class="rule-text">Fill every cell</div>
+            </div>
+            <div class="rule-item">
+                <div class="rule-icon">≠</div>
+                <div class="rule-text">Lines cannot cross</div>
+            </div>
+        </div>
+        <button id="rules-toggle-btn">➜</button>
+    </div>
+
     <header>
         <h1>Link</h1>
         <div id="stats">
@@ -23,12 +43,10 @@
     <div id="message-area"></div>
 
     <div id="ui-controls">
-        <button class="btn-secondary" id="btn-undo">Undo</button>
-        <button class="btn-primary" id="btn-hint">Hint</button>
-        <button class="btn-secondary" id="btn-reset">Reset</button>
+        <button class="game-btn btn-secondary" id="btn-undo">Undo</button>
+        <button class="game-btn btn-primary" id="btn-hint">Hint</button>
+        <button class="game-btn btn-secondary" id="btn-reset">Reset</button>
     </div>
-
-    <button id="theme-toggle" title="Toggle Dark Mode">🌙</button>
 
     <script src="script.js"></script>
 </body>

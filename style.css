@@ -1,4 +1,3 @@
-/* Default Light Mode */
 :root {
     --bg-color: #f0f2f5;
     --grid-bg: #ffffff;
@@ -8,9 +7,11 @@
     --accent: #4f46e5;
     --btn-bg: #e5e7eb;
     --btn-text: #374151;
+    --panel-bg: #ffffff;
+    --shadow: rgba(0,0,0,0.2);
+    --pop-shadow: 0 4px 0 rgba(0,0,0,0.2);
 }
 
-/* Dark Mode */
 body.dark-mode {
     --bg-color: #111827;
     --grid-bg: #1f2937;
@@ -18,6 +19,9 @@ body.dark-mode {
     --node-color: #c7d2fe;
     --btn-bg: #374151;
     --btn-text: #f3f4f6;
+    --panel-bg: #2d3748; 
+    --shadow: rgba(0,0,0,0.5);
+    --pop-shadow: 0 4px 0 rgba(0,0,0,0.5);
 }
 
 body {
@@ -36,11 +40,111 @@ body {
     transition: background-color 0.3s ease;
 }
 
+#theme-toggle {
+    position: fixed;
+    top: 20px;
+    left: 20px;
+    background: none;
+    border: none;
+    font-size: 2rem;
+    cursor: pointer;
+    z-index: 100;
+    transition: transform 0.2s;
+    padding: 0;
+    filter: drop-shadow(0 2px 4px var(--shadow));
+}
+#theme-toggle:hover { transform: scale(1.1) rotate(15deg); }
+
+#rules-container {
+    position: fixed;
+    top: 20%; 
+    left: 0;
+    width: 220px; 
+    transform: translateX(-100%); 
+    z-index: 200;
+    transition: transform 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
+    display: flex; 
+    flex-direction: column;
+}
+
+#rules-container.open { transform: translateX(0); }
+
+#rules-panel {
+    background-color: var(--panel-bg);
+    padding: 20px;
+    border-radius: 0 0 15px 0;
+    box-shadow: 5px 5px 20px var(--shadow); 
+    width: 100%; 
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    border: 2px solid var(--btn-bg); 
+    border-left: none;
+}
+
+body.dark-mode #rules-panel {
+    border-color: #4b5563;
+    box-shadow: 5px 5px 20px rgba(0,0,0,0.8);
+}
+
+#rules-toggle-btn {
+    position: absolute;
+    left: 100%; 
+    top: 0;
+    width: 50px;
+    height: 50px;
+    background-color: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 0 10px 10px 0;
+    cursor: pointer;
+    font-size: 1.5rem;
+    box-shadow: 4px 4px 8px var(--shadow);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: pulse-attention 2s infinite;
+}
+
+#rules-container.open #rules-toggle-btn {
+    animation: none;
+    background-color: var(--btn-bg);
+    color: var(--text-color);
+}
+
+@keyframes pulse-attention {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+}
+
+.rule-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 10px;
+}
+
+.rule-icon {
+    font-size: 1.2rem;
+    background: var(--btn-bg);
+    width: 50px;
+    height: 50px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    color: var(--accent);
+    box-shadow: var(--pop-shadow);
+}
+
 header {
     text-align: center;
     margin-bottom: 15px;
     width: 100%;
-    position: relative;
 }
 
 h1 { 
@@ -48,6 +152,7 @@ h1 {
     color: var(--text-color); 
     font-size: 2.5rem;
     letter-spacing: 2px;
+    text-shadow: 2px 2px 0 var(--bg-color);
 }
 
 #stats {
@@ -60,36 +165,12 @@ h1 {
     opacity: 0.8;
 }
 
-/* Theme Toggle Button */
-#theme-toggle {
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    background-color: var(--grid-bg);
-    color: var(--text-color);
-    border: 2px solid var(--btn-bg);
-    border-radius: 50%;
-    width: 60px;
-    height: 60px;
-    font-size: 1.8rem;
-    cursor: pointer;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.2);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 100;
-    transition: transform 0.2s, background-color 0.3s;
-}
-#theme-toggle:hover {
-    transform: scale(1.1) rotate(15deg);
-}
-
 #game-wrapper {
     position: relative;
     background: var(--grid-bg);
     padding: 10px;
     border-radius: 15px;
-    box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+    box-shadow: 0 15px 35px var(--shadow); 
     width: 90vw; 
     height: 90vw;
     max-width: 500px;
@@ -119,23 +200,28 @@ canvas {
 }
 
 #ui-controls {
-    margin-top: 10px;
+    margin-top: 15px;
     display: flex;
     gap: 15px;
 }
 
-button {
+button.game-btn {
     padding: 12px 24px;
     border: none;
     border-radius: 25px;
     font-size: 16px;
     font-weight: bold;
     cursor: pointer;
-    transition: transform 0.1s;
+    transition: all 0.1s ease;
     outline: none;
+    box-shadow: var(--pop-shadow);
+    transform: translateY(0);
 }
 
-button:active { transform: scale(0.95); }
+button.game-btn:active { 
+    transform: translateY(4px); 
+    box-shadow: none; 
+}
 
 .btn-primary { background-color: var(--accent); color: white; }
 .btn-secondary { background-color: var(--btn-bg); color: var(--btn-text); }

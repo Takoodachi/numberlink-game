@@ -4,50 +4,161 @@ class Game {
         this.ctx = this.canvas.getContext('2d');
         this.wrapper = document.getElementById('game-wrapper');
         
-        this.gridSize = 5; 
-        this.level = 1;
+        this.allLevels = [];
+        this.currentLevelIndex = 0;
+        this.maxUnlockedIndex = 0; 
+        
         this.hints = 2;
         this.lastHintDate = null;
+        
+        this.gridSize = 5; 
         this.maxNumber = 0;
-        
-        this.numberIndices = {}; 
-        
-        this.colors = [
-            '#6d28d9', '#ef4444', '#059669', '#2563eb', 
-            '#db2777', '#d97706', '#0891b2'
-        ];
-        
         this.grid = []; 
         this.solutionPath = []; 
+        this.numberIndices = {}; 
         this.userLines = []; 
         this.currentDragLine = null;
+        
         this.isDrawing = false;
         this.isDarkMode = false;
         this.isWinning = false;
+        
+        this.colors = [ '#6d28d9', '#ef4444', '#059669', '#2563eb', '#db2777', '#d97706', '#0891b2' ];
         
         document.getElementById('btn-undo').onclick = () => this.undo();
         document.getElementById('btn-hint').onclick = () => this.useHint();
         document.getElementById('btn-reset').onclick = () => this.resetLevel();
         document.getElementById('theme-toggle').onclick = () => this.toggleTheme();
-        
-        this.initSidePanel();
+        document.getElementById('level-select-btn').onclick = () => this.openLevelModal();
+        document.getElementById('close-level-btn').onclick = () => this.closeLevelModal();
 
-        this.canvas.addEventListener('mousedown', (e) => this.handleStart(e));
-        this.canvas.addEventListener('mousemove', (e) => this.handleMove(e));
-        window.addEventListener('mouseup', () => this.handleEnd());
-        
-        this.canvas.addEventListener('touchstart', (e) => this.handleStart(e, true), {passive: false});
-        this.canvas.addEventListener('touchmove', (e) => this.handleMove(e, true), {passive: false});
-        window.addEventListener('touchend', () => this.handleEnd());
+        this.initSidePanel();
+        this.bindInputs();
 
         window.addEventListener('resize', () => this.resizeCanvas());
 
-        this.loadProgress();
         this.initTheme(); 
+        this.loadProgress();
         this.checkDailyHint();
-        this.initLevel();
+        this.fetchLevels();
     }
 
+    async fetchLevels() {
+        try {
+            const response = await fetch('levels.json');
+            if (!response.ok) throw new Error("Could not load levels");
+            this.allLevels = await response.json();
+            
+            if (this.currentLevelIndex >= this.allLevels.length) {
+                this.currentLevelIndex = this.allLevels.length - 1;
+            }
+            
+            this.loadLevel(this.currentLevelIndex);
+        } catch (error) {
+            console.error(error);
+            document.getElementById('message-area').innerText = "Loading...";
+            setTimeout(() => {
+                if(this.allLevels.length === 0) alert("Please verify levels.json is uploaded to GitHub.");
+            }, 2000);
+        }
+    }
+
+    loadLevel(index) {
+        if (!this.allLevels || !this.allLevels[index]) return;
+
+        this.currentLevelIndex = index;
+        const levelData = this.allLevels[index];
+        
+        this.gridSize = levelData.size;
+        this.isWinning = false;
+        this.userLines = [];
+        this.currentDragLine = null;
+        this.numberIndices = {};
+        this.setRandomColor();
+        this.grid = Array(this.gridSize).fill().map(() => Array(this.gridSize).fill({ val: null, type: 'empty' }));
+        this.resizeCanvas();
+        this.solutionPath = levelData.solution;
+        
+        let maxVal = 0;
+        levelData.clues.forEach(clue => {
+            this.grid[clue.r][clue.c] = { val: clue.val, type: 'fixed' };
+            if (clue.val > maxVal) maxVal = clue.val;
+            
+            const pathIdx = this.solutionPath.findIndex(p => p.r === clue.r && p.c === clue.c);
+            if(pathIdx !== -1) this.numberIndices[clue.val] = pathIdx;
+        });
+        
+        this.maxNumber = maxVal;
+        this.updateUI();
+        this.draw();
+        this.closeLevelModal();
+    }
+
+    openLevelModal() {
+        const modal = document.getElementById('level-modal');
+        const grid = document.getElementById('level-grid');
+        grid.innerHTML = '';
+        
+        if (this.allLevels.length === 0) {
+            grid.innerHTML = '<p style="color:var(--text-color); padding:20px;">Levels loading...</p>';
+        } else {
+            for (let i = 0; i <= this.maxUnlockedIndex && i < this.allLevels.length; i++) {
+                const lvl = this.allLevels[i];
+                const btn = document.createElement('button');
+                btn.innerText = lvl.id;
+                btn.className = 'lvl-btn';
+                
+                if (i === this.currentLevelIndex) btn.classList.add('active');
+                
+                btn.onclick = () => this.loadLevel(i);
+                grid.appendChild(btn);
+            }
+        }
+
+        modal.classList.add('open');
+    }
+
+    closeLevelModal() {
+        document.getElementById('level-modal').classList.remove('open');
+    }
+
+    loadProgress() {
+        const saved = localStorage.getItem('linkGameData');
+        if (saved) {
+            const data = JSON.parse(saved);
+            this.currentLevelIndex = data.currentLevelIndex || 0;
+            this.maxUnlockedIndex = data.maxUnlockedIndex || 0;
+            this.hints = data.hints !== undefined ? data.hints : 2;
+            this.lastHintDate = data.lastHintDate;
+        }
+    }
+
+    saveProgress() {
+        const data = {
+            currentLevelIndex: this.currentLevelIndex,
+            maxUnlockedIndex: this.maxUnlockedIndex,
+            hints: this.hints,
+            lastHintDate: this.lastHintDate
+        };
+        localStorage.setItem('linkGameData', JSON.stringify(data));
+        this.updateUI();
+    }
+    
+    checkDailyHint() {
+        const today = new Date().toDateString();
+        if (this.lastHintDate === null) {
+            this.lastHintDate = today;
+            this.saveProgress();
+            return;
+        }
+        if (this.lastHintDate !== today) {
+            this.hints = 2; 
+            this.lastHintDate = today;
+            alert("New Day! Hints reset to 2.");
+            this.saveProgress();
+        }
+    }
+    
     initSidePanel() {
         const rulesContainer = document.getElementById('rules-container');
         const rulesBtn = document.getElementById('rules-toggle-btn');
@@ -73,7 +184,15 @@ class Game {
         });
     }
 
-    /* --- THEME & COLOR --- */
+    bindInputs() {
+        this.canvas.addEventListener('mousedown', (e) => this.handleStart(e));
+        this.canvas.addEventListener('mousemove', (e) => this.handleMove(e));
+        window.addEventListener('mouseup', () => this.handleEnd());
+        this.canvas.addEventListener('touchstart', (e) => this.handleStart(e, true), {passive: false});
+        this.canvas.addEventListener('touchmove', (e) => this.handleMove(e, true), {passive: false});
+        window.addEventListener('touchend', () => this.handleEnd());
+    }
+
     initTheme() {
         const savedTheme = localStorage.getItem('theme');
         if (savedTheme === 'dark') {
@@ -100,127 +219,19 @@ class Game {
         document.documentElement.style.setProperty('--line-color', newColor);
     }
 
-    /* --- SETUP & RESIZING --- */
     resizeCanvas() {
         const rect = this.wrapper.getBoundingClientRect();
         const displaySize = Math.floor(Math.min(rect.width, rect.height) - 20);
         const dpr = window.devicePixelRatio || 1;
-        
         this.canvas.width = displaySize * dpr;
         this.canvas.height = displaySize * dpr;
         this.canvas.style.width = `${displaySize}px`;
         this.canvas.style.height = `${displaySize}px`;
         this.ctx.scale(dpr, dpr);
-
         this.cellSize = displaySize / this.gridSize;
         this.draw();
     }
-
-    /* --- LEVEL GEN & STORAGE --- */
-    loadProgress() {
-        const saved = localStorage.getItem('linkGameData');
-        if (saved) {
-            const data = JSON.parse(saved);
-            this.level = data.level || 1;
-            this.hints = data.hints !== undefined ? data.hints : 2;
-            this.lastHintDate = data.lastHintDate;
-            this.gridSize = Math.min(8, 5 + Math.floor((this.level - 1) / 5));
-        }
-    }
-
-    saveProgress() {
-        const data = {
-            level: this.level,
-            hints: this.hints,
-            lastHintDate: this.lastHintDate
-        };
-        localStorage.setItem('linkGameData', JSON.stringify(data));
-        this.updateUI();
-    }
-
-    checkDailyHint() {
-        const today = new Date().toDateString();
-        if (this.lastHintDate !== today) {
-            this.hints = 2;
-            this.lastHintDate = today;
-            alert("New Day! Hints reset to 2.");
-            this.saveProgress();
-        }
-    }
-
-    initLevel() {
-        this.isWinning = false;
-        this.setRandomColor();
-        this.userLines = [];
-        this.currentDragLine = null;
-        this.numberIndices = {};
-        
-        this.grid = Array(this.gridSize).fill().map(() => Array(this.gridSize).fill({ val: null, type: 'empty' }));
-        this.resizeCanvas();
-        this.solutionPath = this.generateHamiltonianPath();
-        
-        let pathIdx = 0;
-        let numCounter = 1;
-        
-        while(pathIdx < this.solutionPath.length) {
-            const pos = this.solutionPath[pathIdx];
-            this.grid[pos.r][pos.c] = { val: numCounter, type: 'fixed' };
-            
-            this.numberIndices[numCounter] = pathIdx;
-
-            if(pathIdx === this.solutionPath.length - 1) break;
-            let gap = Math.floor(Math.random() * 3) + 2; 
-            if (pathIdx + gap >= this.solutionPath.length) gap = this.solutionPath.length - 1 - pathIdx;
-            if(gap === 0) gap = 1;
-            pathIdx += gap;
-            numCounter++;
-        }
-
-        const lastPos = this.solutionPath[this.solutionPath.length - 1];
-        if (this.grid[lastPos.r][lastPos.c].val === null) {
-            this.grid[lastPos.r][lastPos.c] = { val: numCounter, type: 'fixed' };
-            this.numberIndices[numCounter] = this.solutionPath.length - 1;
-        } else {
-            numCounter = this.grid[lastPos.r][lastPos.c].val;
-        }
-
-        this.maxNumber = numCounter;
-        this.updateUI();
-        this.draw();
-    }
-
-    generateHamiltonianPath() {
-        const path = [];
-        const visited = new Set();
-        const N = this.gridSize;
-        const solve = (r, c) => {
-            path.push({r, c});
-            visited.add(`${r},${c}`);
-            if (path.length === N * N) return true;
-            const dirs = [[0,1], [1,0], [0,-1], [-1,0]].sort(() => Math.random() - 0.5);
-            for (let [dr, dc] of dirs) {
-                const nr = r + dr, nc = c + dc;
-                if (nr >= 0 && nr < N && nc >= 0 && nc < N && !visited.has(`${nr},${nc}`)) {
-                    if (solve(nr, nc)) return true;
-                }
-            }
-            visited.delete(`${r},${c}`);
-            path.pop();
-            return false;
-        };
-        let attempts = 0;
-        while(attempts < 100) {
-            path.length = 0;
-            visited.clear();
-            const startR = Math.floor(Math.random() * N);
-            const startC = Math.floor(Math.random() * N);
-            if (solve(startR, startC)) return path;
-            attempts++;
-        }
-        return path; 
-    }
-
-    /* --- INPUT HANDLING --- */
+    
     getPos(e, isTouch) {
         const rect = this.canvas.getBoundingClientRect();
         const clientX = isTouch ? e.touches[0].clientX : e.clientX;
@@ -230,27 +241,18 @@ class Game {
             r: Math.floor((clientY - rect.top) / (rect.height / this.gridSize))
         };
     }
-
-    getLineAt(r, c) {
-        return this.userLines.find(line => 
-            line.points.some(p => p.r === r && p.c === c)
-        );
-    }
-
+    getLineAt(r, c) { return this.userLines.find(line => line.points.some(p => p.r === r && p.c === c)); }
+    
     handleStart(e, isTouch) {
         if (this.isWinning) return; 
         if(isTouch) e.preventDefault();
         const {r, c} = this.getPos(e, isTouch);
         if (!this.isValidCell(r, c)) return;
-
         const cell = this.grid[r][c];
         if (cell.val !== null) {
             this.isDrawing = true;
-            this.currentDragLine = {
-                startVal: cell.val,
-                points: [{r, c}]
-            };
-            this.userLines = this.userLines.filter(l => l.startVal < cell.val);
+            this.currentDragLine = { startVal: cell.val, points: [{r, c}] };
+            this.userLines = this.userLines.filter(l => l.startVal !== cell.val);
             this.draw();
         }
     }
@@ -297,7 +299,7 @@ class Game {
                 return;
             } 
             
-            if (target.type === 'fixed' && target.val < this.currentDragLine.startVal) {
+            if (target.type === 'fixed' && target.val === this.currentDragLine.startVal - 1) {
                  this.userLines = this.userLines.filter(l => l.startVal < target.val);
                  this.currentDragLine = {
                      startVal: target.val,
@@ -307,17 +309,18 @@ class Game {
                  return;
             }
 
-            if (lineAtTarget && lineAtTarget.startVal < this.currentDragLine.startVal) {
+            if (lineAtTarget && lineAtTarget.startVal === this.currentDragLine.startVal - 1) {
                 const cutIdx = lineAtTarget.points.findIndex(p => p.r === r && p.c === c);
                 const newPoints = lineAtTarget.points.slice(0, cutIdx + 1);
                 this.currentDragLine = {
                     startVal: lineAtTarget.startVal,
                     points: newPoints
                 };
-                this.userLines = this.userLines.filter(l => l.startVal < lineAtTarget.startVal);
+                this.userLines = this.userLines.filter(l => l.startVal !== lineAtTarget.startVal);
                 this.draw();
                 return;
             }
+
             return; 
         }
 
@@ -325,159 +328,103 @@ class Game {
         this.draw();
     }
 
-    handleEnd() {
-        this.isDrawing = false;
-        this.currentDragLine = null;
-        this.draw();
-    }
-
-    isValidCell(r, c) {
-        return r >= 0 && r < this.gridSize && c >= 0 && c < this.gridSize;
-    }
-
+    handleEnd() { this.isDrawing = false; this.currentDragLine = null; this.draw(); }
+    isValidCell(r, c) { return r >= 0 && r < this.gridSize && c >= 0 && c < this.gridSize; }
     isCellOccupied(r, c) {
         if (this.grid[r][c].type === 'fixed') return true;
-        for (let line of this.userLines) {
-            for (let p of line.points) {
-                if (p.r === r && p.c === c) return true;
-            }
-        }
-        if (this.currentDragLine) {
-            for (let i = 0; i < this.currentDragLine.points.length - 1; i++) {
-                const p = this.currentDragLine.points[i];
-                if (p.r === r && p.c === c) return true;
-            }
-        }
+        for (let line of this.userLines) { for (let p of line.points) { if (p.r === r && p.c === c) return true; } }
+        if (this.currentDragLine) { for (let i = 0; i < this.currentDragLine.points.length - 1; i++) { const p = this.currentDragLine.points[i]; if (p.r === r && p.c === c) return true; } }
         return false;
     }
-
-    undo() {
-        if (this.userLines.length > 0 && !this.isWinning) {
-            this.userLines.pop();
-            this.draw();
-        }
-    }
-
-    resetLevel() {
-        if (!this.isWinning) {
-            this.userLines = [];
-            this.draw();
-        }
-    }
+    
+    undo() { if (this.userLines.length > 0 && !this.isWinning) { this.userLines.pop(); this.draw(); } }
+    resetLevel() { if (!this.isWinning) { this.userLines = []; this.draw(); } }
 
     useHint() {
-        if (this.hints <= 0 || this.isWinning) {
-            if(!this.isWinning) alert("No hints remaining! Come back tomorrow.");
-            return;
-        }
-        this.hints--;
-        this.saveProgress();
-
+        if (this.hints <= 0 || this.isWinning) { if(!this.isWinning) alert("No hints remaining! Come back tomorrow."); return; }
+        this.hints--; this.saveProgress();
         let currentMax = 1;
         while (currentMax < this.maxNumber) {
             const hasNext = this.userLines.find(l => l.startVal === currentMax);
-            if (hasNext) {
-                currentMax++;
-            } else {
-                break;
-            }
+            if (hasNext) { currentMax++; } else { break; }
         }
-
         const targetNumber = Math.min(currentMax + 4, this.maxNumber);
-        
         const startIndex = this.numberIndices[currentMax];
         const endIndex = this.numberIndices[targetNumber];
-
         if (startIndex === undefined || endIndex === undefined) return;
-
         const hintPoints = this.solutionPath.slice(startIndex, endIndex + 1);
-
         const ctx = this.ctx;
         ctx.save();
         ctx.globalAlpha = 0.6;
         ctx.strokeStyle = this.isDarkMode ? "#FFFF00" : "#FFD700"; 
         ctx.lineWidth = this.cellSize * 0.4;
-        ctx.lineCap = "round";
-        ctx.lineJoin = "round";
-        
+        ctx.lineCap = "round"; ctx.lineJoin = "round";
         ctx.beginPath();
         const cx = c => c * this.cellSize + this.cellSize/2;
         const cy = r => r * this.cellSize + this.cellSize/2;
-        
         ctx.moveTo(cx(hintPoints[0].c), cy(hintPoints[0].r));
-        for(let i=1; i<hintPoints.length; i++) {
-            ctx.lineTo(cx(hintPoints[i].c), cy(hintPoints[i].r));
-        }
-        
-        ctx.stroke();
-        ctx.restore();
-        
+        for(let i=1; i<hintPoints.length; i++) { ctx.lineTo(cx(hintPoints[i].c), cy(hintPoints[i].r)); }
+        ctx.stroke(); ctx.restore();
         setTimeout(() => this.draw(), 2000);
     }
 
     checkWin() {
         const set = new Set();
-        this.grid.forEach((row, r) => row.forEach((cell, c) => {
-            if(cell.type === 'fixed') set.add(`${r},${c}`);
-        }));
-        this.userLines.forEach(line => {
-            line.points.forEach(p => set.add(`${p.r},${p.c}`));
-        });
+        this.grid.forEach((row, r) => row.forEach((cell, c) => { if(cell.type === 'fixed') set.add(`${r},${c}`); }));
+        this.userLines.forEach(line => { line.points.forEach(p => set.add(`${p.r},${p.c}`)); });
         const isGridFull = (set.size === this.gridSize * this.gridSize);
         const requiredLines = this.maxNumber - 1;
         const currentLines = this.userLines.length;
-        if (isGridFull && currentLines === requiredLines) {
-            this.triggerWinSequence();
-        }
+        if (isGridFull && currentLines === requiredLines) { this.triggerWinSequence(); }
     }
-
     triggerWinSequence() {
         this.isWinning = true;
         const sortedLines = [...this.userLines].sort((a, b) => a.startVal - b.startVal);
         this.winAnimationPoints = [];
-        sortedLines.forEach(line => {
-            this.winAnimationPoints.push(...line.points);
-        });
-        this.winFrame = 0;
-        this.totalWinFrames = 120; 
+        sortedLines.forEach(line => { this.winAnimationPoints.push(...line.points); });
+        this.winFrame = 0; this.totalWinFrames = 120; 
         requestAnimationFrame(() => this.animateWinLoop());
     }
-
     animateWinLoop() {
         if (!this.isWinning) return;
         this.winFrame++;
         const progress = this.winFrame / this.totalWinFrames;
         this.draw(true, progress); 
-        if (this.winFrame < this.totalWinFrames) {
-            requestAnimationFrame(() => this.animateWinLoop());
-        } else {
-            setTimeout(() => this.handleLevelComplete(), 500);
-        }
+        if (this.winFrame < this.totalWinFrames) { requestAnimationFrame(() => this.animateWinLoop()); } 
+        else { setTimeout(() => this.handleLevelComplete(), 500); }
     }
-
     handleLevelComplete() {
         const msg = document.getElementById('message-area');
         msg.innerText = "Level Complete!";
         msg.classList.add('visible'); 
-        
+        if (this.currentLevelIndex === this.maxUnlockedIndex) {
+            this.maxUnlockedIndex++;
+        }
         setTimeout(() => {
-            this.level++;
-            this.gridSize = Math.min(8, 5 + Math.floor((this.level - 1) / 5));
-            this.saveProgress();
+            if (this.currentLevelIndex + 1 < this.allLevels.length) {
+                this.currentLevelIndex++;
+                this.saveProgress();
+                this.loadLevel(this.currentLevelIndex);
+            } else {
+                alert("You have beaten all levels!");
+            }
             msg.classList.remove('visible');
             msg.innerText = "";
-            this.initLevel();
         }, 1000);
+    }
+    updateUI() {
+        if(this.allLevels && this.allLevels[this.currentLevelIndex]) {
+            document.getElementById('level-select-btn').innerText = `Level ${this.allLevels[this.currentLevelIndex].id} ▾`;
+        }
+        document.getElementById('hints-display').innerText = `Hints: ${this.hints}`;
     }
 
     draw(isAnimating = false, animationProgress = 1) {
         if (!this.grid || !this.grid[0]) return;
-
         const cs = this.cellSize;
         const ctx = this.ctx;
         const W = this.canvas.width / (window.devicePixelRatio || 1);
         const H = this.canvas.height / (window.devicePixelRatio || 1);
-        
         const style = getComputedStyle(document.body);
         const bgColor = style.getPropertyValue('--grid-bg').trim();
         const lineColor = style.getPropertyValue('--line-color').trim();
@@ -500,21 +447,14 @@ class Game {
             }
             ctx.stroke();
         }
-
         const drawPoly = (points) => {
             if(points.length < 2) return;
-            ctx.beginPath();
-            ctx.lineCap = "round";
-            ctx.lineJoin = "round";
-            ctx.lineWidth = cs * 0.5;
-            ctx.strokeStyle = lineColor;
+            ctx.beginPath(); ctx.lineCap = "round"; ctx.lineJoin = "round";
+            ctx.lineWidth = cs * 0.5; ctx.strokeStyle = lineColor;
             ctx.moveTo(cx(points[0].c), cy(points[0].r));
             for(let i=1; i<points.length; i++) ctx.lineTo(cx(points[i].c), cy(points[i].r));
             ctx.stroke();
-
-            ctx.beginPath();
-            ctx.lineWidth = cs * 0.15; 
-            ctx.strokeStyle = "rgba(255, 255, 255, 0.3)";
+            ctx.beginPath(); ctx.lineWidth = cs * 0.15; ctx.strokeStyle = "rgba(255, 255, 255, 0.3)";
             ctx.moveTo(cx(points[0].c), cy(points[0].r));
             for(let i=1; i<points.length; i++) ctx.lineTo(cx(points[i].c), cy(points[i].r));
             ctx.stroke();
@@ -523,11 +463,8 @@ class Game {
         if (isAnimating) {
             const maxIdx = Math.floor(this.winAnimationPoints.length * animationProgress);
             if (maxIdx > 1) {
-                ctx.save();
-                ctx.shadowBlur = 15;
-                ctx.shadowColor = lineColor;
-                drawPoly(this.winAnimationPoints.slice(0, maxIdx));
-                ctx.restore();
+                ctx.save(); ctx.shadowBlur = 15; ctx.shadowColor = lineColor;
+                drawPoly(this.winAnimationPoints.slice(0, maxIdx)); ctx.restore();
             }
         } else {
             this.userLines.forEach(l => drawPoly(l.points));
@@ -535,35 +472,18 @@ class Game {
         }
 
         ctx.font = `bold ${cs * 0.4}px sans-serif`;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
         for(let r=0; r<this.gridSize; r++) {
             for(let c=0; c<this.gridSize; c++) {
                 const cell = this.grid[r][c];
                 if(cell.type === 'fixed') {
-                    ctx.save();
-                    ctx.shadowColor = "rgba(0,0,0,0.3)";
-                    ctx.shadowBlur = 5;
-                    ctx.shadowOffsetY = 3;
-                    ctx.fillStyle = nodeColor;
-                    ctx.beginPath();
-                    ctx.arc(cx(c), cy(r), cs * 0.35, 0, Math.PI*2); 
-                    ctx.fill();
-                    ctx.restore();
-                    ctx.fillStyle = nodeTextColor;
-                    ctx.fillText(cell.val, cx(c), cy(r));
+                    ctx.save(); ctx.shadowColor = "rgba(0,0,0,0.3)"; ctx.shadowBlur = 5; ctx.shadowOffsetY = 3;
+                    ctx.fillStyle = nodeColor; ctx.beginPath();
+                    ctx.arc(cx(c), cy(r), cs * 0.35, 0, Math.PI*2); ctx.fill(); ctx.restore();
+                    ctx.fillStyle = nodeTextColor; ctx.fillText(cell.val, cx(c), cy(r));
                 }
             }
         }
     }
-    
-    updateUI() {
-        document.getElementById('level-display').innerText = `Level: ${this.level}`;
-        document.getElementById('hints-display').innerText = `Hints: ${this.hints}`;
-    }
 }
-
-window.onload = () => {
-    new Game();
-};
+window.onload = () => { new Game(); };

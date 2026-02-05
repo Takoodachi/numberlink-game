@@ -31,6 +31,11 @@ class Game {
         document.getElementById('theme-toggle').onclick = () => this.toggleTheme();
         document.getElementById('level-select-btn').onclick = () => this.openLevelModal();
         document.getElementById('close-level-btn').onclick = () => this.closeLevelModal();
+        document.getElementById('level-modal').addEventListener('click', (e) => {
+            if (e.target.id === 'level-modal') {
+                this.closeLevelModal();
+            }
+        });
 
         this.initSidePanel();
         this.bindInputs();
@@ -252,7 +257,7 @@ class Game {
         if (cell.val !== null) {
             this.isDrawing = true;
             this.currentDragLine = { startVal: cell.val, points: [{r, c}] };
-            this.userLines = this.userLines.filter(l => l.startVal !== cell.val);
+            this.userLines = this.userLines.filter(l => l.startVal < cell.val);
             this.draw();
         }
     }
@@ -260,72 +265,65 @@ class Game {
     handleMove(e, isTouch) {
         if (!this.isDrawing || !this.currentDragLine || this.isWinning) return;
         if(isTouch) e.preventDefault();
-        
         const {r, c} = this.getPos(e, isTouch);
         if (!this.isValidCell(r, c)) return;
-
         const pts = this.currentDragLine.points;
         const last = pts[pts.length - 1];
-
         if (r === last.r && c === last.c) return; 
-
+        
         if (pts.length > 1) {
             const prev = pts[pts.length - 2];
-            if (prev.r === r && prev.c === c) {
-                pts.pop();
-                this.draw();
-                return;
-            }
+            if (prev.r === r && prev.c === c) { pts.pop(); this.draw(); return; }
         }
-
+        
         if (Math.abs(r - last.r) + Math.abs(c - last.c) !== 1) return;
-
+        
         if (this.isCellOccupied(r, c)) {
             const target = this.grid[r][c];
-            const lineAtTarget = this.getLineAt(r, c);
 
-            if (target.type === 'fixed' && target.val === this.currentDragLine.startVal + 1) {
-                pts.push({r, c});
-                this.userLines.push(this.currentDragLine);
-                if (target.val < this.maxNumber) {
-                    this.currentDragLine = { startVal: target.val, points: [{r, c}] };
-                    this.userLines = this.userLines.filter(l => l.startVal !== target.val);
-                } else {
-                    this.isDrawing = false;
-                    this.currentDragLine = null;
+            if (target.type === 'fixed') {
+                if (target.val === this.currentDragLine.startVal) {
+                    this.currentDragLine.points = [{r, c}]; 
+                    this.draw();
+                    return;
                 }
-                this.checkWin();
-                this.draw();
+
+                if (target.val === this.currentDragLine.startVal + 1) {
+                    pts.push({r, c});
+                    this.userLines.push(this.currentDragLine);
+                    if (target.val < this.maxNumber) {
+                        this.currentDragLine = { startVal: target.val, points: [{r, c}] };
+                        this.userLines = this.userLines.filter(l => l.startVal !== target.val);
+                    } else { 
+                        this.isDrawing = false; 
+                        this.currentDragLine = null; 
+                    }
+                    this.checkWin(); 
+                    this.draw(); 
+                    return;
+                } 
+                
+                if (target.val === this.currentDragLine.startVal - 1) {
+                     this.userLines = this.userLines.filter(l => l.startVal < target.val);
+                     this.currentDragLine = { startVal: target.val, points: [{r, c}] };
+                     this.draw(); 
+                     return;
+                }
+
                 return;
-            } 
+            }
+
+            const lineAtTarget = this.getLineAt(r, c);
             
-            if (target.type === 'fixed' && target.val === this.currentDragLine.startVal - 1) {
-                 this.userLines = this.userLines.filter(l => l.startVal < target.val);
-                 this.currentDragLine = {
-                     startVal: target.val,
-                     points: [{r, c}]
-                 };
-                 this.draw();
-                 return;
-            }
-
             if (lineAtTarget && lineAtTarget.startVal === this.currentDragLine.startVal - 1) {
-                const cutIdx = lineAtTarget.points.findIndex(p => p.r === r && p.c === c);
-                const newPoints = lineAtTarget.points.slice(0, cutIdx + 1);
-                this.currentDragLine = {
-                    startVal: lineAtTarget.startVal,
-                    points: newPoints
-                };
-                this.userLines = this.userLines.filter(l => l.startVal !== lineAtTarget.startVal);
                 this.draw();
                 return;
+            } else {
+                return;
             }
-
-            return; 
         }
-
-        pts.push({r, c});
-        this.draw();
+        
+        pts.push({r, c}); this.draw();
     }
 
     handleEnd() { this.isDrawing = false; this.currentDragLine = null; this.draw(); }
@@ -423,8 +421,6 @@ class Game {
         if (!this.grid || !this.grid[0]) return;
         const cs = this.cellSize;
         const ctx = this.ctx;
-        const W = this.canvas.width / (window.devicePixelRatio || 1);
-        const H = this.canvas.height / (window.devicePixelRatio || 1);
         const style = getComputedStyle(document.body);
         const bgColor = style.getPropertyValue('--grid-bg').trim();
         const lineColor = style.getPropertyValue('--line-color').trim();
@@ -438,6 +434,25 @@ class Game {
         const cy = r => r * cs + cs/2;
 
         if (!isAnimating) {
+            ctx.fillStyle = lineColor;
+            ctx.globalAlpha = 0.15;
+
+            const fillCell = (r, c) => {
+                ctx.fillRect(c * cs + 1, r * cs + 1, cs - 2, cs - 2);
+            };
+
+            this.userLines.forEach(line => {
+                line.points.forEach(p => fillCell(p.r, p.c));
+            });
+
+            if (this.currentDragLine) {
+                this.currentDragLine.points.forEach(p => fillCell(p.r, p.c));
+            }
+
+            ctx.globalAlpha = 1.0;
+        }
+
+        if (!isAnimating) {
             ctx.strokeStyle = this.isDarkMode ? "#374151" : "#f3f4f6";
             ctx.lineWidth = 2;
             ctx.beginPath();
@@ -447,6 +462,7 @@ class Game {
             }
             ctx.stroke();
         }
+
         const drawPoly = (points) => {
             if(points.length < 2) return;
             ctx.beginPath(); ctx.lineCap = "round"; ctx.lineJoin = "round";
@@ -468,7 +484,40 @@ class Game {
             }
         } else {
             this.userLines.forEach(l => drawPoly(l.points));
-            if(this.currentDragLine) drawPoly(this.currentDragLine.points);
+            
+            if(this.currentDragLine) {
+                const prevLine = this.userLines.find(l => l.startVal === this.currentDragLine.startVal - 1);
+                
+                if (!prevLine) {
+                    drawPoly(this.currentDragLine.points);
+                } else {
+                    const excludeSet = new Set(prevLine.points.map(p => `${p.r},${p.c}`));
+                    const pts = this.currentDragLine.points;
+                    
+                    if (pts.length > 1) {
+                        ctx.lineCap = "round"; ctx.lineJoin = "round";
+                        ctx.lineWidth = cs * 0.5; ctx.strokeStyle = lineColor;
+                        ctx.beginPath();
+                        for(let i=0; i<pts.length-1; i++) {
+                            const p1 = pts[i]; const p2 = pts[i+1];
+                            if(excludeSet.has(`${p1.r},${p1.c}`) && excludeSet.has(`${p2.r},${p2.c}`)) continue;
+                            ctx.moveTo(cx(p1.c), cy(p1.r));
+                            ctx.lineTo(cx(p2.c), cy(p2.r));
+                        }
+                        ctx.stroke();
+
+                        ctx.lineWidth = cs * 0.15; ctx.strokeStyle = "rgba(255, 255, 255, 0.3)";
+                        ctx.beginPath();
+                        for(let i=0; i<pts.length-1; i++) {
+                            const p1 = pts[i]; const p2 = pts[i+1];
+                            if(excludeSet.has(`${p1.r},${p1.c}`) && excludeSet.has(`${p2.r},${p2.c}`)) continue;
+                            ctx.moveTo(cx(p1.c), cy(p1.r));
+                            ctx.lineTo(cx(p2.c), cy(p2.r));
+                        }
+                        ctx.stroke();
+                    }
+                }
+            }
         }
 
         ctx.font = `bold ${cs * 0.4}px sans-serif`;

@@ -96,7 +96,7 @@ class Game {
             const pathIdx = this.solutionPath.findIndex(p => p.r === clue.r && p.c === clue.c);
             if(pathIdx !== -1) this.numberIndices[clue.val] = pathIdx;
         });
-        
+
         this.maxNumber = maxVal;
         this.updateUI();
         this.draw();
@@ -172,6 +172,16 @@ class Game {
         const rulesContainer = document.getElementById('rules-container');
         const rulesBtn = document.getElementById('rules-toggle-btn');
         const panel = document.getElementById('rules-panel');
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        const controlsText = document.getElementById('controls-rule-text');
+        
+        if (controlsText) {
+            if (isMobile) {
+                controlsText.innerText = "Drag to link!";
+            } else {
+                controlsText.innerText = "Drag or use arrow keys to link!";
+            }
+        }
 
         const hasVisited = localStorage.getItem('linkGameHasVisited');
         if (!hasVisited) {
@@ -200,6 +210,7 @@ class Game {
         this.canvas.addEventListener('touchstart', (e) => this.handleStart(e, true), {passive: false});
         this.canvas.addEventListener('touchmove', (e) => this.handleMove(e, true), {passive: false});
         window.addEventListener('touchend', () => this.handleEnd());
+        window.addEventListener('keydown', (e) => this.handleKeyDown(e));
     }
 
     initTheme() {
@@ -291,13 +302,79 @@ class Game {
         }
     }
 
+    handleKeyDown(e) {
+        if (this.isWinning) return;
+
+        let dr = 0, dc = 0;
+        if (e.key === 'ArrowUp') dr = -1;
+        else if (e.key === 'ArrowDown') dr = 1;
+        else if (e.key === 'ArrowLeft') dc = -1;
+        else if (e.key === 'ArrowRight') dc = 1;
+        else return;
+
+        e.preventDefault();
+
+        if (!this.isDrawing || !this.currentDragLine) {
+            let startNode = null;
+            let startVal = null;
+
+            if (this.userLines.length > 0) {
+                const lastLine = this.userLines[this.userLines.length - 1];
+                const lastPt = lastLine.points[lastLine.points.length - 1];
+                const cell = this.grid[lastPt.r][lastPt.c];
+                if (cell.val !== null) {
+                    startNode = lastPt;
+                    startVal = cell.val;
+                }
+            } else {
+                for(let r=0; r<this.gridSize; r++) {
+                    for(let c=0; c<this.gridSize; c++) {
+                        if (this.grid[r][c].val === 1) {
+                            startNode = {r, c};
+                            startVal = 1;
+                            break;
+                        }
+                    }
+                    if (startNode) break;
+                }
+            }
+
+            if (startNode) {
+                this.isDrawing = true;
+                this.currentDragLine = { 
+                    startVal: startVal, 
+                    points: [{r: startNode.r, c: startNode.c}], 
+                    widthScale: 0.45 
+                };
+                this.draw();
+            } else {
+                return;
+            }
+        }
+
+        const pts = this.currentDragLine.points;
+        const head = pts[pts.length - 1];
+        const r = head.r + dr;
+        const c = head.c + dc;
+
+        if (!this.isValidCell(r, c)) return;
+
+        this.attemptMove(r, c);
+    }
+
     handleMove(e, isTouch) {
         if (!this.isDrawing || !this.currentDragLine || this.isWinning) return;
         if(isTouch) e.preventDefault();
         const {r, c} = this.getPos(e, isTouch);
         if (!this.isValidCell(r, c)) return;
+        
+        this.attemptMove(r, c);
+    }
+
+    attemptMove(r, c) {
         const pts = this.currentDragLine.points;
         const last = pts[pts.length - 1];
+        
         if (r === last.r && c === last.c) return; 
         
         if (pts.length > 1) {
@@ -309,6 +386,7 @@ class Game {
         
         if (this.isCellOccupied(r, c)) {
             const target = this.grid[r][c];
+
             if (this.userLines.length > 0) {
                 const lastLine = this.userLines[this.userLines.length - 1];
                 if (lastLine.points.length > 1) {

@@ -7,6 +7,8 @@ class Game {
         this.confettiParticles = [];
         this.isCelebrating = false;
         this.wrapper = document.getElementById('game-wrapper');
+
+        this.isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
         
         this.allLevels = [];
         this.currentLevelIndex = 0;
@@ -44,12 +46,17 @@ class Game {
         this.initSidePanel();
         this.bindInputs();
 
+        window.addEventListener('resize', () => {
+            this.resizeCanvas();
+            this.checkOrientation();
+        });
         window.addEventListener('resize', () => this.resizeCanvas());
 
         this.initTheme(); 
         this.loadProgress();
         this.checkDailyHint();
         this.fetchLevels();
+        this.checkOrientation();
     }
 
     async fetchLevels() {
@@ -172,11 +179,10 @@ class Game {
         const rulesContainer = document.getElementById('rules-container');
         const rulesBtn = document.getElementById('rules-toggle-btn');
         const panel = document.getElementById('rules-panel');
-        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
         const controlsText = document.getElementById('controls-rule-text');
         
         if (controlsText) {
-            if (isMobile) {
+            if (this.isMobile) {
                 controlsText.innerText = "Drag to link!";
             } else {
                 controlsText.innerText = "Drag or use arrow keys to link!";
@@ -210,6 +216,7 @@ class Game {
         this.canvas.addEventListener('touchstart', (e) => this.handleStart(e, true), {passive: false});
         this.canvas.addEventListener('touchmove', (e) => this.handleMove(e, true), {passive: false});
         window.addEventListener('touchend', () => this.handleEnd());
+        document.getElementById('btn-show-answer').onclick = () => this.showAnswer();
         window.addEventListener('keydown', (e) => this.handleKeyDown(e));
     }
 
@@ -375,23 +382,18 @@ class Game {
         const pts = this.currentDragLine.points;
         const last = pts[pts.length - 1];
         
-        // Ignore if we are still in the same cell
         if (r === last.r && c === last.c) return; 
         
-        // 1. Standard Backtrack (within the currently dragging line)
-        // This handles simply moving back one step (A -> B -> A)
         if (pts.length > 1) {
             const prev = pts[pts.length - 2];
             if (prev.r === r && prev.c === c) { pts.pop(); this.draw(); return; }
         }
         
-        // Ensure we only move to adjacent cells
         if (Math.abs(r - last.r) + Math.abs(c - last.c) !== 1) return;
         
         if (this.isCellOccupied(r, c)) {
             const target = this.grid[r][c];
 
-            // 2. Backtrack through a Number (Resurrect previous line)
             if (this.userLines.length > 0) {
                 const lastLine = this.userLines[this.userLines.length - 1];
                 if (lastLine.points.length > 1) {
@@ -443,15 +445,11 @@ class Game {
                 return;
             }
 
-            // Collision with older lines
             const lineAtTarget = this.getLineAt(r, c);
             if (lineAtTarget) {
                 return;
             }
 
-            // --- THE FIX IS HERE ---
-            // If the cell is occupied (by our own line), and it wasn't a backtrack or valid connection,
-            // we MUST return to block the move. This prevents drawing loops on top of yourself.
             return; 
         }
         
@@ -552,6 +550,12 @@ class Game {
             document.getElementById('level-select-btn').innerText = `Level ${this.allLevels[this.currentLevelIndex].id} ▾`;
         }
         document.getElementById('hints-display').innerText = `Hints: ${this.hints}`;
+        const answerBtn = document.getElementById('btn-show-answer');
+        if (this.currentLevelIndex < this.maxUnlockedIndex) {
+            answerBtn.style.display = 'inline-block';
+        } else {
+            answerBtn.style.display = 'none';
+        }
     }
 
     draw(isAnimating = false, animationProgress = 1) {
@@ -793,6 +797,43 @@ class Game {
         });
 
         requestAnimationFrame(() => this.animateConfetti());
+    }
+
+    showAnswer() {
+        if (this.currentLevelIndex >= this.maxUnlockedIndex) return;
+
+        this.userLines = [];
+        this.currentDragLine = null;
+        this.isDrawing = false;
+        this.isWinning = false;
+
+        for (let val = 1; val < this.maxNumber; val++) {
+            const startIdx = this.numberIndices[val];
+            const endIdx = this.numberIndices[val + 1];
+
+            if (startIdx !== undefined && endIdx !== undefined) {
+                const points = this.solutionPath.slice(startIdx, endIdx + 1);
+                
+                this.userLines.push({
+                    startVal: val,
+                    points: points,
+                    widthScale: 0.5
+                });
+            }
+        }
+
+        this.draw();
+    }
+
+    checkOrientation() {
+        if (!this.isMobile) return;
+
+        const overlay = document.getElementById('orientation-lock');
+        if (window.innerWidth > window.innerHeight) {
+            overlay.style.display = 'flex';
+        } else {
+            overlay.style.display = 'none';
+        }
     }
 }
 window.onload = () => { new Game(); };

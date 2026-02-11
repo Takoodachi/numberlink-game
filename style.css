@@ -358,3 +358,31 @@ body.dark-mode .lvl-btn.locked { background: #374151; opacity: 0.3; }
 #confetti-canvas.active {
     display: block;
 }
+
+#orientation-lock {
+    display: none;
+    position: fixed;
+    top: 0; left: 0;
+    width: 100vw; height: 100vh;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    z-index: 10000;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    font-size: 1.5rem;
+    font-weight: bold;
+}
+
+#orientation-lock .rotate-icon {
+    font-size: 4rem;
+    margin-bottom: 20px;
+    animation: spin-icon 2s infinite ease-in-out;
+}
+
+@keyframes spin-icon {
+    0% { transform: rotate(-90deg); }
+    50% { transform: rotate(0deg); }
+    100% { transform: rotate(-90deg); }
+}

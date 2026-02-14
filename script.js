@@ -1,3 +1,24 @@
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-app.js";
+import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-analytics.js";
+
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-auth.js";
+import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore.js";
+
+const firebaseConfig = {
+    apiKey: "AIzaSyACoE3UwOfESN1o_GPPATdN_mmtjomMiL8",
+    authDomain: "numberlink-73560.firebaseapp.com",
+    projectId: "numberlink-73560",
+    storageBucket: "numberlink-73560.firebasestorage.app",
+    messagingSenderId: "689648695062",
+    appId: "1:689648695062:web:cae517808fcc47eae5c237",
+    measurementId: "G-NMVN4KL7KF"
+};
+
+const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
 class Game {
     constructor() {
         this.canvas = document.getElementById('gameCanvas');
@@ -28,6 +49,8 @@ class Game {
         this.isDrawing = false;
         this.isDarkMode = false;
         this.isWinning = false;
+        this.currentUser = null;
+        this.isLoginMode = true;
         
         this.colors = [ '#6d28d9', '#ef4444', '#059669', '#2563eb', '#db2777', '#d97706', '#0891b2' ];
         
@@ -35,13 +58,27 @@ class Game {
         document.getElementById('btn-hint').onclick = () => this.useHint();
         document.getElementById('btn-reset').onclick = () => this.resetLevel();
         document.getElementById('theme-toggle').onclick = () => this.toggleTheme();
+        
         document.getElementById('level-select-btn').onclick = () => this.openLevelModal();
         document.getElementById('close-level-btn').onclick = () => this.closeLevelModal();
         document.getElementById('level-modal').addEventListener('click', (e) => {
-            if (e.target.id === 'level-modal') {
-                this.closeLevelModal();
-            }
+            if (e.target.id === 'level-modal') this.closeLevelModal();
         });
+
+        document.getElementById('auth-btn').onclick = () => this.toggleAuth();
+        document.getElementById('close-auth-btn').onclick = () => document.getElementById('auth-modal').classList.remove('open');
+        document.getElementById('auth-submit-btn').onclick = () => this.handleAuthSubmit();
+        document.getElementById('auth-toggle-text').onclick = () => this.toggleAuthMode();
+        document.getElementById('auth-modal').addEventListener('click', (e) => {
+            if (e.target.id === 'auth-modal') e.target.classList.remove('open');
+        });
+
+        document.getElementById('close-profile-btn').onclick = () => document.getElementById('profile-modal').classList.remove('open');
+        document.getElementById('profile-modal').addEventListener('click', (e) => {
+            if (e.target.id === 'profile-modal') e.target.classList.remove('open');
+        });
+        document.getElementById('profile-logout-btn').onclick = () => this.handleLogout();
+        document.getElementById('profile-reset-pwd').onclick = () => this.handlePasswordReset();
 
         this.initSidePanel();
         this.bindInputs();
@@ -50,13 +87,232 @@ class Game {
             this.resizeCanvas();
             this.checkOrientation();
         });
-        window.addEventListener('resize', () => this.resizeCanvas());
 
         this.initTheme(); 
-        this.loadProgress();
-        this.checkDailyHint();
-        this.fetchLevels();
         this.checkOrientation();
+        this.fetchLevels();
+        this.initAuth();
+    }
+
+    initAuth() {
+        const authBtn = document.getElementById('auth-btn');
+        
+        const loggedInText = this.isMobile ? "👤✓" : "Profile";
+        const loggedOutText = this.isMobile ? "👤" : "Login";
+
+        authBtn.innerText = loggedOutText;
+        authBtn.title = "Login / Register";
+
+        onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                this.currentUser = user;
+                authBtn.innerText = loggedInText;
+                
+                authBtn.title = `Logged in as: ${user.email}`; 
+                
+                await this.loadProgress();
+            } else {
+                this.currentUser = null;
+                authBtn.innerText = loggedOutText;
+                authBtn.title = "Login / Register"; 
+                
+                await this.loadProgress();
+            }
+        });
+    }
+
+    toggleAuthMode() {
+        this.isLoginMode = !this.isLoginMode;
+        const title = document.getElementById('auth-title');
+        const submitBtn = document.getElementById('auth-submit-btn');
+        const toggleText = document.getElementById('auth-toggle-text');
+        const errorText = document.getElementById('auth-error');
+
+        errorText.innerText = "";
+
+        if (this.isLoginMode) {
+            title.innerText = "Login";
+            submitBtn.innerText = "Login";
+            toggleText.innerHTML = "Don't have an account? <span>Register</span>";
+        } else {
+            title.innerText = "Register";
+            submitBtn.innerText = "Register";
+            toggleText.innerHTML = "Already have an account? <span>Login</span>";
+        }
+    }
+
+    toggleAuth() {
+        if (this.currentUser) {
+            document.getElementById('profile-email').innerText = this.currentUser.email;
+            
+            const lvlString = this.allLevels[this.currentLevelIndex] ? this.allLevels[this.currentLevelIndex].id : this.currentLevelIndex + 1;
+            document.getElementById('profile-level').innerText = lvlString;
+            
+            document.getElementById('profile-modal').classList.add('open');
+        } else {
+            this.isLoginMode = true;
+            document.getElementById('auth-title').innerText = "Login";
+            document.getElementById('auth-submit-btn').innerText = "Login";
+            document.getElementById('auth-toggle-text').innerHTML = "Don't have an account? <span>Register</span>";
+            
+            document.getElementById('auth-email').value = "";
+            document.getElementById('auth-password').value = "";
+            document.getElementById('auth-error').innerText = "";
+            
+            document.getElementById('auth-modal').classList.add('open');
+        }
+    }
+
+    handleLogout() {
+        signOut(auth);
+        document.getElementById('profile-modal').classList.remove('open');
+    }
+
+    async handlePasswordReset() {
+        if (!this.currentUser) return;
+        
+        try {
+            await sendPasswordResetEmail(auth, this.currentUser.email);
+            alert(`A password reset link has been sent to ${this.currentUser.email}`);
+        } catch (error) {
+            alert("Error sending reset email: " + error.message);
+        }
+    }
+
+    async handleAuthSubmit() {
+        const email = document.getElementById('auth-email').value.trim();
+        const password = document.getElementById('auth-password').value;
+        const errorText = document.getElementById('auth-error');
+        
+        if (!email || !password) {
+            errorText.innerText = "Please fill out all fields.";
+            return;
+        }
+
+        errorText.innerText = "Processing...";
+        
+        try {
+            if (this.isLoginMode) {
+                await signInWithEmailAndPassword(auth, email, password);
+                document.getElementById('auth-modal').classList.remove('open');
+            } else {
+                await createUserWithEmailAndPassword(auth, email, password);
+                document.getElementById('auth-modal').classList.remove('open');
+            }
+        } catch (error) {
+            if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+                errorText.innerText = "Incorrect email or password.";
+            } else if (error.code === 'auth/email-already-in-use') {
+                errorText.innerText = "An account with this email already exists.";
+            } else if (error.code === 'auth/weak-password') {
+                errorText.innerText = "Password must be at least 6 characters.";
+            } else if (error.code === 'auth/invalid-email') {
+                errorText.innerText = "Please enter a valid email address.";
+            } else {
+                errorText.innerText = error.message;
+            }
+        }
+    }
+
+    async loadProgress() {
+        const saved = localStorage.getItem('linkGameData');
+        if (saved) {
+            const data = JSON.parse(saved);
+            this.currentLevelIndex = data.currentLevelIndex || 0;
+            this.maxUnlockedIndex = data.maxUnlockedIndex || 0;
+            this.hints = data.hints !== undefined ? data.hints : 2;
+            this.lastHintDate = data.lastHintDate;
+        }
+
+        if (this.currentUser) {
+            try {
+                const docRef = doc(db, "users", this.currentUser.uid);
+                const docSnap = await getDoc(docRef);
+
+                if (docSnap.exists()) {
+                    const cloudData = docSnap.data();
+                    
+                    const localMax = this.maxUnlockedIndex || 0;
+                    const cloudMax = cloudData.maxUnlockedIndex || 0;
+
+                    if (localMax !== cloudMax) {
+                        const choice = await this.askForConflictResolution(localMax, cloudMax);
+                        if (choice === 'cloud') {
+                            this.applyCloudData(cloudData);
+                        } else {
+                            this.saveProgress();
+                        }
+                    } else {
+                        this.applyCloudData(cloudData);
+                    }
+                } else {
+                    this.saveProgress();
+                }
+            } catch (e) {
+                console.error("Error loading from cloud:", e);
+            }
+        }
+        
+        this.checkDailyHint();
+    }
+
+    applyCloudData(cloudData) {
+        this.currentLevelIndex = cloudData.currentLevelIndex;
+        this.maxUnlockedIndex = cloudData.maxUnlockedIndex;
+        this.hints = cloudData.hints;
+        this.lastHintDate = cloudData.lastHintDate;
+        
+        localStorage.setItem('linkGameData', JSON.stringify(cloudData));
+        this.updateUI();
+        this.loadLevel(this.currentLevelIndex);
+    }
+
+    askForConflictResolution(localIndex, cloudIndex) {
+        return new Promise((resolve) => {
+            const modal = document.getElementById('conflict-modal');
+            const localBtn = document.getElementById('btn-keep-local');
+            const cloudBtn = document.getElementById('btn-keep-cloud');
+
+            const localLvlString = this.allLevels[localIndex] ? `Level ${this.allLevels[localIndex].id}` : `Level ${localIndex + 1}`;
+            const cloudLvlString = this.allLevels[cloudIndex] ? `Level ${this.allLevels[cloudIndex].id}` : `Level ${cloudIndex + 1}`;
+
+            document.getElementById('conflict-local-text').innerText = localLvlString;
+            document.getElementById('conflict-cloud-text').innerText = cloudLvlString;
+
+            modal.classList.add('open');
+
+            const handleLocal = () => { cleanup(); resolve('local'); };
+            const handleCloud = () => { cleanup(); resolve('cloud'); };
+
+            const cleanup = () => {
+                modal.classList.remove('open');
+                localBtn.removeEventListener('click', handleLocal);
+                cloudBtn.removeEventListener('click', handleCloud);
+            };
+
+            localBtn.addEventListener('click', handleLocal);
+            cloudBtn.addEventListener('click', handleCloud);
+        });
+    }
+
+    async saveProgress() {
+        const data = {
+            currentLevelIndex: this.currentLevelIndex,
+            maxUnlockedIndex: this.maxUnlockedIndex,
+            hints: this.hints,
+            lastHintDate: this.lastHintDate
+        };
+        
+        localStorage.setItem('linkGameData', JSON.stringify(data));
+        this.updateUI();
+
+        if (this.currentUser) {
+            try {
+                await setDoc(doc(db, "users", this.currentUser.uid), data);
+            } catch (e) {
+                console.error("Error saving to cloud:", e);
+            }
+        }
     }
 
     async fetchLevels() {
@@ -136,28 +392,6 @@ class Game {
 
     closeLevelModal() {
         document.getElementById('level-modal').classList.remove('open');
-    }
-
-    loadProgress() {
-        const saved = localStorage.getItem('linkGameData');
-        if (saved) {
-            const data = JSON.parse(saved);
-            this.currentLevelIndex = data.currentLevelIndex || 0;
-            this.maxUnlockedIndex = data.maxUnlockedIndex || 0;
-            this.hints = data.hints !== undefined ? data.hints : 2;
-            this.lastHintDate = data.lastHintDate;
-        }
-    }
-
-    saveProgress() {
-        const data = {
-            currentLevelIndex: this.currentLevelIndex,
-            maxUnlockedIndex: this.maxUnlockedIndex,
-            hints: this.hints,
-            lastHintDate: this.lastHintDate
-        };
-        localStorage.setItem('linkGameData', JSON.stringify(data));
-        this.updateUI();
     }
     
     checkDailyHint() {

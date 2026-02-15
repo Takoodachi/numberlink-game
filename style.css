@@ -27,6 +27,66 @@ body.dark-mode {
     --on-accent: #111827;
 }
 
+html, body.mobile-layout {
+    overflow: hidden !important;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100dvh;
+    touch-action: none;
+}
+
+body.mobile-layout #level-grid {
+    touch-action: pan-y;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+body.mobile-layout .auth-modal-content {
+    touch-action: pan-y;
+    overflow-y: auto;
+}
+
+body.mobile-layout header {
+    padding-top: 110px;
+}
+
+body.mobile-layout .auth-top-right,
+body.mobile-layout #rules-container {
+    top: 45px !important; 
+}
+
+body.mobile-layout #game-wrapper {
+    margin-bottom: 2vh;
+}
+
+body.mobile-layout #message-area {
+    min-height: 30px;
+    margin-bottom: 2vh;
+}
+
+body.mobile-layout #ui-controls {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr); 
+    gap: 15px;
+    max-width: 360px;
+    margin: 0 auto;
+    padding: 0 20px 8vh 20px;
+}
+
+body.mobile-layout #btn-undo { grid-column: 1; }
+body.mobile-layout #btn-hint { grid-column: 2; }
+body.mobile-layout #btn-reset { grid-column: 3; }
+
+body.mobile-layout #btn-show-answer {
+    grid-column: 1 / 4;
+    grid-row: 2;
+    justify-self: center;
+    width: auto;
+    min-width: 140px;
+}
+
 body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     background-color: var(--bg-color);
@@ -35,7 +95,7 @@ body {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    min-height: 100vh;
+    min-height: 90vh;
     margin: 0;
     overflow: auto;
     user-select: none;

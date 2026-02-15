@@ -30,7 +30,11 @@ class Game {
         this.wrapper = document.getElementById('game-wrapper');
 
         this.isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-        
+
+        if (this.isMobile) {
+            document.body.classList.add('mobile-layout');
+        }
+
         this.allLevels = [];
         this.currentLevelIndex = 0;
         this.maxUnlockedIndex = 0; 

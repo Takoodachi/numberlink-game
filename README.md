@@ -1,39 +1,52 @@
 # 🔗 Number Link - Logic Puzzle Game
 
-A modern, responsive HTML5 implementation of the classic Number Link / Flow logic puzzle. Connect the numbers in sequence to fill the grid without crossing lines!
+A modern, responsive HTML5 and Native Android implementation of the classic Number Link / Flow logic puzzle. Connect the numbers in sequence to fill the grid without crossing lines!
 
 ## 🎮 Features
 
 ### Gameplay
-* **Dynamic Grid System:** Loads levels dynamically from a JSON file.
+* **Dynamic Grid System:** Loads levels dynamically from a `levels.json` file.
 * **Dual Input Support:**
     * **Mouse/Touch:** Drag to draw lines. Supports backtracking (scrubbing back) to correct mistakes.
     * **Keyboard:** Use **Arrow Keys** to draw lines precisely from your current position.
 * **Smart Mechanics:**
-    * "Snatch" animation when connecting nodes.
+    * Tile "Snatch" scale animation when connecting nodes.
     * Dynamic line width animation while drawing.
     * Auto-detection of "1" as the starting point if no line exists.
 * **Win Validation:** Ensures the grid is full AND numbers are connected in the correct numerical order (1 → 2 → 3...).
 
+### ☁️ Accounts & Cloud Sync (Powered by Firebase)
+* **Authentication:** Seamless Login/Register modal using Firebase Email & Password authentication.
+* **Cross-Platform Sync:** Player progress (current level, max unlocked level, and hints) is saved simultaneously to `localStorage` and Firebase Firestore.
+* **Smart Conflict Resolution:** If local and cloud saves differ, a custom UI prompts the player to choose which save file to keep.
+* **Player Profile:** Dedicated dashboard displaying player stats, current level, and a secure Password Reset system.
+* **Developer Mode:** Logging in with a designated admin email automatically unlocks all levels, grants infinite hints, and bypasses "Show Answer" restrictions.
+
 ### UI & UX
-* **Themes:** Built-in Dark Mode 🌙 and Light Mode ☀️ toggle.
-* **Responsive Design:** resizing canvas that adapts to any screen size.
+* **Themes:** Built-in Dark Mode 🌙 and Light Mode ☀️ toggle with custom-themed scrollbars.
+* **Responsive Design:** Resizing canvas that adapts to any screen size, centered via dynamic viewport height (`dvh`).
 * **Mobile Optimized:**
-    * Touch event support.
+    * Touch event support with `touch-action: none` to prevent native browser bouncing and scrolling.
     * **Portrait Mode Lock:** Forces mobile users to rotate their device for the best experience.
-* **Progress System:**
-    * Saves unlocked levels and current progress to `localStorage`.
-    * "Daily Hint" system (hints regenerate every 24 hours).
+    * Proportional CSS grid layout for UI controls to prevent crowding on small screens.
+* **Dynamic Contact System:** A bottom-corner contact button that opens a `mailto:` link on desktop, but elegantly copies the email to the clipboard on mobile.
 * **Visual Polish:**
     * Confetti celebration on level completion 🎉.
-    * Smooth CSS transitions for UI elements.
+    * Smooth CSS transitions for UI elements and modals.
 * **Review Mode:** "Show Answer" button appears for previously completed levels.
+
+## 📱 Mobile App Version (Android)
+
+This game is packaged as a native Android application using **Capacitor**. It features device-specific optimizations:
+* True fullscreen immersive mode by interacting directly with the Android Status Bar API.
+* Safe-area inset handling to dodge notches and OS gesture bars.
+* Custom native app icon and splash screen generation.
 
 ## 🚀 How to Run Locally
 
 Because this game fetches level data from an external `levels.json` file, modern browsers may block the request if you simply double-click `index.html` due to **CORS (Cross-Origin Resource Sharing)** policies.
 
-To run it locally, you need a local web server.
+To run the web version locally, you need a local web server.
 
 ### Option 1: VS Code (Recommended)
 1.  Install the **Live Server** extension in VS Code.

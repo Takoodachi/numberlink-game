@@ -99,6 +99,7 @@ class Game {
         this.checkOrientation();
         this.fetchLevels();
         this.initAuth();
+        this.initContact();
     }
 
     initAuth() {
@@ -1113,5 +1114,25 @@ class Game {
             overlay.style.display = 'none';
         }
     }
+
+    initContact() {
+        const contactDiv = document.getElementById('contact-corner');
+        const email = "luongdtran06@gmail.com";
+
+        if (this.isMobile) {
+            contactDiv.innerHTML = "✉️";
+            contactDiv.onclick = async () => {
+                try {
+                    await navigator.clipboard.writeText(email);
+                    alert("Email copied to clipboard: " + email);
+                } catch (err) {
+                    alert("Contact me at: " + email);
+                }
+            };
+        } else {
+            contactDiv.innerHTML = `<a href="mailto:${email}">Contact: ${email}</a>`;
+        }
+    }
 }
+
 window.onload = () => { new Game(); };

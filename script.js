@@ -21,6 +21,7 @@ const db = getFirestore(app);
 
 class Game {
     constructor() {
+        this.splashStartTime = Date.now();
         this.canvas = document.getElementById('gameCanvas');
         this.ctx = this.canvas.getContext('2d');
         this.confettiCanvas = document.getElementById('confetti-canvas');
@@ -435,6 +436,12 @@ class Game {
             }
             
             this.loadLevel(this.currentLevelIndex);
+            const elapsedTime = Date.now() - this.splashStartTime;
+            const remainingTime = Math.max(0, 1500 - elapsedTime);
+            
+            setTimeout(() => {
+                this.removeSplashScreen(); 
+            }, remainingTime);
         } catch (error) {
             console.error(error);
             document.getElementById('message-area').innerText = "Loading...";
@@ -1236,6 +1243,18 @@ class Game {
             };
         } else {
             contactDiv.innerHTML = `<a href="mailto:${email}">Contact: ${email}</a>`;
+        }
+    }
+
+    removeSplashScreen() {
+        const webSplash = document.getElementById('web-splash');
+        if (webSplash) {
+            webSplash.classList.add('hidden');
+            setTimeout(() => webSplash.remove(), 500); 
+        }
+
+        if (typeof Capacitor !== 'undefined' && Capacitor.Plugins && Capacitor.Plugins.SplashScreen) {
+            Capacitor.Plugins.SplashScreen.hide();
         }
     }
 }

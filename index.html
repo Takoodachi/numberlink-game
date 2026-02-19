@@ -23,11 +23,16 @@
 </head>
 
 <body>
+    <script>
+        const savedTheme = localStorage.getItem('theme');
+        const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        if (savedTheme === 'dark' || (!savedTheme && systemPrefersDark)) {
+            document.body.classList.add('dark-mode');
+        }
+    </script>
+
     <div id="web-splash" class="web-splash">
-        <picture>
-            <source srcset="splash_dark.png" media="(prefers-color-scheme: light)">
-            <img src="splash_light.png" alt="Loading Logo" class="splash-logo">
-        </picture>
+        <div class="splash-logo"></div>
         <div class="loading-dots">
             <span>.</span><span>.</span><span>.</span>
         </div>
@@ -93,7 +98,10 @@
                 <button id="close-profile-btn">✖</button>
             </div>
             <div class="profile-body">
-                <p class="profile-stat"><strong>Email:</strong> <br><span id="profile-email"></span></p>
+                <p class="profile-stat">
+                    <strong>Email:</strong> <br><span id="profile-email"></span>
+                    <button id="profile-change-email" class="game-btn btn-secondary profile-small-btn">Change</button>
+                </p>
                 <p class="profile-stat">
                     <strong>Password:</strong> <br>•••••••• 
                     <button id="profile-reset-pwd" class="game-btn btn-secondary profile-small-btn">Reset</button>

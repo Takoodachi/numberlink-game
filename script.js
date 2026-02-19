@@ -1,7 +1,15 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-app.js";
 import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-analytics.js";
 
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-auth.js";
+import { getAuth, 
+    createUserWithEmailAndPassword, 
+    signInWithEmailAndPassword, 
+    onAuthStateChanged, 
+    signOut, 
+    sendPasswordResetEmail,
+    verifyBeforeUpdateEmail,
+    sendEmailVerification
+ } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-auth.js";
 import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -82,6 +90,7 @@ class Game {
             if (e.target.id === 'profile-modal') e.target.classList.remove('open');
         });
         document.getElementById('profile-logout-btn').onclick = () => this.handleLogout();
+        document.getElementById('profile-change-email').onclick = () => this.handleEmailChange();
         document.getElementById('profile-reset-pwd').onclick = () => this.handlePasswordReset();
 
         document.getElementById('level-select-btn').onclick = () => this.openLevelModal();
@@ -195,6 +204,31 @@ class Game {
         document.getElementById('profile-modal').classList.remove('open');
     }
 
+    async handleEmailChange() {
+        if (!this.currentUser) return;
+        
+        const newEmail = prompt("Enter your new email address:");
+        
+        if (!newEmail || newEmail.trim() === "" || newEmail === this.currentUser.email) {
+            return; 
+        }
+
+        try {
+            await verifyBeforeUpdateEmail(this.currentUser, newEmail.trim());
+            alert(`A verification link has been sent to ${newEmail.trim()}. Please check that inbox to confirm the change.`);
+        } catch (error) {
+            if (error.code === 'auth/requires-recent-login') {
+                alert("For security reasons, please log out and log back in before changing your email address.");
+            } else if (error.code === 'auth/invalid-email') {
+                alert("Please enter a valid email address.");
+            } else if (error.code === 'auth/email-already-in-use') {
+                alert("That email is already registered to another account.");
+            } else {
+                alert("Error updating email: " + error.message);
+            }
+        }
+    }
+
     async handlePasswordReset() {
         if (!this.currentUser) return;
         
@@ -220,13 +254,31 @@ class Game {
         
         try {
             if (this.isLoginMode) {
-                await signInWithEmailAndPassword(auth, email, password);
+                const userCred = await signInWithEmailAndPassword(auth, email, password);
+                
+                if (!userCred.user.emailVerified) {
+                    await signOut(auth);
+                    errorText.innerText = "Please check your inbox and verify your email before logging in.";
+                    return;
+                }
+                
                 document.getElementById('auth-modal').classList.remove('open');
             } else {
-                await createUserWithEmailAndPassword(auth, email, password);
-                document.getElementById('auth-modal').classList.remove('open');
+                const userCred = await createUserWithEmailAndPassword(auth, email, password);
+                
+                await sendEmailVerification(userCred.user);
+                await signOut(auth);
+                
+                this.isLoginMode = true;
+                document.getElementById('auth-title').innerText = "Login";
+                document.getElementById('auth-submit-btn').innerText = "Login";
+                document.getElementById('auth-toggle-text').innerHTML = "Don't have an account? <span>Register</span>";
+                
+                errorText.style.color = "#059669";
+                errorText.innerText = "Account created! Please check your email to verify.";
             }
         } catch (error) {
+            errorText.style.color = "#ef4444";
             if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
                 errorText.innerText = "Incorrect email or password.";
             } else if (error.code === 'auth/email-already-in-use') {
@@ -532,21 +584,42 @@ class Game {
 
     initTheme() {
         const savedTheme = localStorage.getItem('theme');
-        if (savedTheme === 'dark') {
-            this.isDarkMode = true;
-            document.body.classList.add('dark-mode');
-            document.getElementById('theme-toggle').innerText = "☀️";
+        const systemMedia = window.matchMedia('(prefers-color-scheme: dark)');
+        
+        if (savedTheme) {
+            this.isDarkMode = (savedTheme === 'dark');
         } else {
-            document.getElementById('theme-toggle').innerText = "🌙";
+            this.isDarkMode = systemMedia.matches;
+        }
+
+        this.applyTheme();
+
+        systemMedia.addEventListener('change', (e) => {
+            if (!localStorage.getItem('theme')) {
+                this.isDarkMode = e.matches;
+                this.applyTheme();
+                this.draw(); 
+            }
+        });
+    }
+
+    applyTheme() {
+        document.body.classList.toggle('dark-mode', this.isDarkMode);
+        
+        document.getElementById('theme-toggle').innerText = this.isDarkMode ? "☀️" : "🌙";
+        
+        const favicon = document.getElementById('dynamic-favicon');
+        if (favicon) {
+            favicon.href = this.isDarkMode ? "favicon_dark.png" : "favicon_light.png";
         }
     }
 
     toggleTheme() {
         this.isDarkMode = !this.isDarkMode;
-        document.body.classList.toggle('dark-mode', this.isDarkMode);
-        const btn = document.getElementById('theme-toggle');
-        btn.innerText = this.isDarkMode ? "☀️" : "🌙";
+        
         localStorage.setItem('theme', this.isDarkMode ? 'dark' : 'light');
+        
+        this.applyTheme();
         this.draw(); 
     }
 

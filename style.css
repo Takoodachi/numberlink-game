@@ -761,17 +761,20 @@ body.mobile-layout .contact-corner {
     text-shadow: var(--shadow); 
 }
 
-@media (prefers-color-scheme: dark) {
-    .web-splash {
-        background: #111827;
-    }
-    
-    .loading-dots {
-        color: #f3f4f6;
-    }
+/* Splash Screen */
+.splash-logo {
+    width: 120px;
+    height: 120px;
+    border-radius: 20px; 
+    display: block;
+    background-image: url('splash_dark.png');
+    background-size: cover;
 }
 
-/* Splash Screen */
+body.dark-mode .splash-logo {
+    background-image: url('splash_light.png');
+}
+
 .web-splash {
     position: fixed;
     top: 0;

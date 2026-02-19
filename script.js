@@ -21,6 +21,13 @@ const db = getFirestore(app);
 
 class Game {
     constructor() {
+        this.isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        this.isAPK = typeof Capacitor !== 'undefined' && Capacitor.getPlatform && Capacitor.getPlatform() === 'android';
+
+        if (this.isMobile) {
+            document.body.classList.add('mobile-layout');
+        }
+
         this.splashStartTime = Date.now();
         this.canvas = document.getElementById('gameCanvas');
         this.ctx = this.canvas.getContext('2d');
@@ -30,19 +37,11 @@ class Game {
         this.isCelebrating = false;
         this.wrapper = document.getElementById('game-wrapper');
 
-        this.isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-
-        if (this.isMobile) {
-            document.body.classList.add('mobile-layout');
-        }
-
         this.allLevels = [];
         this.currentLevelIndex = 0;
         this.maxUnlockedIndex = 0; 
-        
         this.hints = 2;
         this.lastHintDate = null;
-        
         this.gridSize = 5; 
         this.maxNumber = 0;
         this.grid = []; 
@@ -51,7 +50,6 @@ class Game {
         this.userLines = []; 
         this.currentDragLine = null;
         
-        this.isAPK = typeof Capacitor !== 'undefined' && Capacitor.getPlatform && Capacitor.getPlatform() === 'android';
         this.isDrawing = false;
         this.isDarkMode = false;
         this.isWinning = false;
@@ -59,9 +57,6 @@ class Game {
         this.isLoginMode = true;
         this.searchTimeout = null;
 
-        this.devEmail = "admin@test.com";
-        this.isDevMode = false;
-        
         this.colors = [ '#6d28d9', '#ef4444', '#059669', '#2563eb', '#db2777', '#d97706', '#0891b2' ];
         
         document.getElementById('btn-undo').onclick = () => this.undo();
@@ -69,17 +64,35 @@ class Game {
         document.getElementById('btn-reset').onclick = () => this.resetLevel();
         document.getElementById('theme-toggle').onclick = () => this.toggleTheme();
         
+        window.addEventListener('resize', () => {
+            this.resizeCanvas();
+            this.checkOrientation();
+        });
+
+        document.getElementById('auth-btn').onclick = () => this.toggleAuth();
+        document.getElementById('close-auth-btn').onclick = () => document.getElementById('auth-modal').classList.remove('open');
+        document.getElementById('auth-submit-btn').onclick = () => this.handleAuthSubmit();
+        document.getElementById('auth-toggle-text').onclick = () => this.toggleAuthMode();
+        document.getElementById('auth-modal').addEventListener('click', (e) => {
+            if (e.target.id === 'auth-modal') e.target.classList.remove('open');
+        });
+
+        document.getElementById('close-profile-btn').onclick = () => document.getElementById('profile-modal').classList.remove('open');
+        document.getElementById('profile-modal').addEventListener('click', (e) => {
+            if (e.target.id === 'profile-modal') e.target.classList.remove('open');
+        });
+        document.getElementById('profile-logout-btn').onclick = () => this.handleLogout();
+        document.getElementById('profile-reset-pwd').onclick = () => this.handlePasswordReset();
+
         document.getElementById('level-select-btn').onclick = () => this.openLevelModal();
         document.getElementById('close-level-btn').onclick = () => this.closeLevelModal();
         document.getElementById('level-search').addEventListener('keydown', (e) => {
             if (e.key === 'Enter') this.executeSearch();
         });
-        
         document.getElementById('level-search-btn').addEventListener('click', () => this.executeSearch());
         this.lastScrollTop = 0;
         const levelGrid = document.getElementById('level-grid');
         const searchContainer = document.querySelector('.search-container');
-
         levelGrid.addEventListener('scroll', () => {
             if (!searchContainer) return;
             
@@ -98,29 +111,11 @@ class Game {
             if (e.target.id === 'level-modal') this.closeLevelModal();
         });
 
-        document.getElementById('auth-btn').onclick = () => this.toggleAuth();
-        document.getElementById('close-auth-btn').onclick = () => document.getElementById('auth-modal').classList.remove('open');
-        document.getElementById('auth-submit-btn').onclick = () => this.handleAuthSubmit();
-        document.getElementById('auth-toggle-text').onclick = () => this.toggleAuthMode();
-        document.getElementById('auth-modal').addEventListener('click', (e) => {
-            if (e.target.id === 'auth-modal') e.target.classList.remove('open');
-        });
-
-        document.getElementById('close-profile-btn').onclick = () => document.getElementById('profile-modal').classList.remove('open');
-        document.getElementById('profile-modal').addEventListener('click', (e) => {
-            if (e.target.id === 'profile-modal') e.target.classList.remove('open');
-        });
-        document.getElementById('profile-logout-btn').onclick = () => this.handleLogout();
-        document.getElementById('profile-reset-pwd').onclick = () => this.handlePasswordReset();
+        this.devEmail = "admin@test.com";
+        this.isDevMode = false;
 
         this.initSidePanel();
         this.bindInputs();
-
-        window.addEventListener('resize', () => {
-            this.resizeCanvas();
-            this.checkOrientation();
-        });
-
         this.initTheme(); 
         this.checkOrientation();
         this.fetchLevels();
@@ -129,6 +124,7 @@ class Game {
         this.initApkPrompt();
     }
 
+    // Authentication and Cloud Methods
     initAuth() {
         const authBtn = document.getElementById('auth-btn');
         
@@ -191,36 +187,6 @@ class Game {
             document.getElementById('auth-error').innerText = "";
             
             document.getElementById('auth-modal').classList.add('open');
-        }
-    }
-
-    initApkPrompt() {
-        const modal = document.getElementById('apk-modal');
-        const closeBtn = document.getElementById('close-apk-btn');
-        const downloadBtn = document.getElementById('btn-download-apk');
-        const continueBtn = document.getElementById('btn-continue-web');
-
-        const dismissPrompt = () => {
-            modal.classList.remove('open');
-            localStorage.setItem('apkPromptDismissed', 'true');
-        };
-
-        closeBtn.onclick = dismissPrompt;
-        continueBtn.onclick = dismissPrompt;
-        
-        downloadBtn.onclick = () => {
-            window.open('https://github.com/Takoodachi/numberlink-game/releases/tag/Android_App', '_blank'); 
-            dismissPrompt();
-        };
-
-        modal.addEventListener('click', (e) => {
-            if (e.target.id === 'apk-modal') dismissPrompt();
-        });
-
-        if (this.isMobile && localStorage.getItem('apkPromptDismissed') !== 'true' && !this.isAPK) {
-            setTimeout(() => {
-                modal.classList.add('open');
-            }, 1500);
         }
     }
 
@@ -376,6 +342,7 @@ class Game {
         }
     }
 
+    // UI and Level Selection Methods
     executeSearch() {
         const searchInput = document.getElementById('level-search');
         if (!searchInput) return;
@@ -397,11 +364,12 @@ class Game {
         const modal = document.getElementById('level-modal');
         const grid = document.getElementById('level-grid');
         const searchInput = document.getElementById('level-search');
+        const searchContainer = document.querySelector('.search-container');
 
         if (searchContainer) searchContainer.classList.remove('hidden');
         grid.scrollTop = 0;
         this.lastScrollTop = 0;
-        
+
         grid.innerHTML = '';
         if (searchInput) searchInput.value = '';
         
@@ -483,49 +451,8 @@ class Game {
         this.closeLevelModal();
     }
 
-    openLevelModal() {
-        const modal = document.getElementById('level-modal');
-        const grid = document.getElementById('level-grid');
-        grid.innerHTML = '';
-        
-        if (this.allLevels.length === 0) {
-            grid.innerHTML = '<p style="color:var(--text-color); padding:20px;">Levels loading...</p>';
-        } else {
-            const limit = this.isDevMode ? this.allLevels.length : this.maxUnlockedIndex;
-            
-            for (let i = 0; i <= limit && i < this.allLevels.length; i++) {
-                const lvl = this.allLevels[i];
-                const btn = document.createElement('button');
-                btn.innerText = lvl.id;
-                btn.className = 'lvl-btn';
-                
-                if (i === this.currentLevelIndex) btn.classList.add('active');
-                
-                btn.onclick = () => this.loadLevel(i);
-                grid.appendChild(btn);
-            }
-        }
-
-        modal.classList.add('open');
-    }
-
     closeLevelModal() {
         document.getElementById('level-modal').classList.remove('open');
-    }
-    
-    checkDailyHint() {
-        const today = new Date().toDateString();
-        if (this.lastHintDate === null) {
-            this.lastHintDate = today;
-            this.saveProgress();
-            return;
-        }
-        if (this.lastHintDate !== today) {
-            this.hints = 2; 
-            this.lastHintDate = today;
-            alert("New Day! Hints reset to 2.");
-            this.saveProgress();
-        }
     }
     
     initSidePanel() {
@@ -562,15 +489,45 @@ class Game {
         });
     }
 
-    bindInputs() {
-        this.canvas.addEventListener('mousedown', (e) => this.handleStart(e));
-        this.canvas.addEventListener('mousemove', (e) => this.handleMove(e));
-        window.addEventListener('mouseup', () => this.handleEnd());
-        this.canvas.addEventListener('touchstart', (e) => this.handleStart(e, true), {passive: false});
-        this.canvas.addEventListener('touchmove', (e) => this.handleMove(e, true), {passive: false});
-        window.addEventListener('touchend', () => this.handleEnd());
-        document.getElementById('btn-show-answer').onclick = () => this.showAnswer();
-        window.addEventListener('keydown', (e) => this.handleKeyDown(e));
+    initApkPrompt() {
+        const modal = document.getElementById('apk-modal');
+        const closeBtn = document.getElementById('close-apk-btn');
+        const downloadBtn = document.getElementById('btn-download-apk');
+        const continueBtn = document.getElementById('btn-continue-web');
+
+        const dismissPrompt = () => {
+            modal.classList.remove('open');
+            localStorage.setItem('apkPromptDismissed', 'true');
+        };
+
+        closeBtn.onclick = dismissPrompt;
+        continueBtn.onclick = dismissPrompt;
+        
+        downloadBtn.onclick = () => {
+            window.open('https://github.com/Takoodachi/numberlink-game/releases/tag/Android_App', '_blank'); 
+            dismissPrompt();
+        };
+
+        modal.addEventListener('click', (e) => {
+            if (e.target.id === 'apk-modal') dismissPrompt();
+        });
+
+        if (this.isMobile && localStorage.getItem('apkPromptDismissed') !== 'true' && !this.isAPK) {
+            setTimeout(() => {
+                modal.classList.add('open');
+            }, 1500);
+        }
+    }
+
+    checkOrientation() {
+        if (!this.isMobile) return;
+
+        const overlay = document.getElementById('orientation-lock');
+        if (window.innerWidth > window.innerHeight) {
+            overlay.style.display = 'flex';
+        } else {
+            overlay.style.display = 'none';
+        }
     }
 
     initTheme() {
@@ -616,6 +573,18 @@ class Game {
         this.cellSize = displaySize / this.gridSize;
         this.draw();
     }
+
+    // Game Interaction Methods
+    bindInputs() {
+        this.canvas.addEventListener('mousedown', (e) => this.handleStart(e));
+        this.canvas.addEventListener('mousemove', (e) => this.handleMove(e));
+        window.addEventListener('mouseup', () => this.handleEnd());
+        this.canvas.addEventListener('touchstart', (e) => this.handleStart(e, true), {passive: false});
+        this.canvas.addEventListener('touchmove', (e) => this.handleMove(e, true), {passive: false});
+        window.addEventListener('touchend', () => this.handleEnd());
+        document.getElementById('btn-show-answer').onclick = () => this.showAnswer();
+        window.addEventListener('keydown', (e) => this.handleKeyDown(e));
+    }
     
     getPos(e, isTouch) {
         const rect = this.canvas.getBoundingClientRect();
@@ -626,6 +595,7 @@ class Game {
             r: Math.floor((clientY - rect.top) / (rect.height / this.gridSize))
         };
     }
+
     getLineAt(r, c) { return this.userLines.find(line => line.points.some(p => p.r === r && p.c === c)); }
     
     handleStart(e, isTouch) {
@@ -660,66 +630,6 @@ class Game {
                 this.draw();
             }
         }
-    }
-
-    handleKeyDown(e) {
-        if (this.isWinning) return;
-
-        let dr = 0, dc = 0;
-        if (e.key === 'ArrowUp') dr = -1;
-        else if (e.key === 'ArrowDown') dr = 1;
-        else if (e.key === 'ArrowLeft') dc = -1;
-        else if (e.key === 'ArrowRight') dc = 1;
-        else return;
-
-        e.preventDefault();
-
-        if (!this.isDrawing || !this.currentDragLine) {
-            let startNode = null;
-            let startVal = null;
-
-            if (this.userLines.length > 0) {
-                const lastLine = this.userLines[this.userLines.length - 1];
-                const lastPt = lastLine.points[lastLine.points.length - 1];
-                const cell = this.grid[lastPt.r][lastPt.c];
-                if (cell.val !== null) {
-                    startNode = lastPt;
-                    startVal = cell.val;
-                }
-            } else {
-                for(let r=0; r<this.gridSize; r++) {
-                    for(let c=0; c<this.gridSize; c++) {
-                        if (this.grid[r][c].val === 1) {
-                            startNode = {r, c};
-                            startVal = 1;
-                            break;
-                        }
-                    }
-                    if (startNode) break;
-                }
-            }
-
-            if (startNode) {
-                this.isDrawing = true;
-                this.currentDragLine = { 
-                    startVal: startVal, 
-                    points: [{r: startNode.r, c: startNode.c}], 
-                    widthScale: 0.45 
-                };
-                this.draw();
-            } else {
-                return;
-            }
-        }
-
-        const pts = this.currentDragLine.points;
-        const head = pts[pts.length - 1];
-        const r = head.r + dr;
-        const c = head.c + dc;
-
-        if (!this.isValidCell(r, c)) return;
-
-        this.attemptMove(r, c);
     }
 
     handleMove(e, isTouch) {
@@ -810,7 +720,69 @@ class Game {
     }
 
     handleEnd() { this.isDrawing = false; this.currentDragLine = null; this.draw(); }
+
+    handleKeyDown(e) {
+        if (this.isWinning) return;
+
+        let dr = 0, dc = 0;
+        if (e.key === 'ArrowUp') dr = -1;
+        else if (e.key === 'ArrowDown') dr = 1;
+        else if (e.key === 'ArrowLeft') dc = -1;
+        else if (e.key === 'ArrowRight') dc = 1;
+        else return;
+
+        e.preventDefault();
+
+        if (!this.isDrawing || !this.currentDragLine) {
+            let startNode = null;
+            let startVal = null;
+
+            if (this.userLines.length > 0) {
+                const lastLine = this.userLines[this.userLines.length - 1];
+                const lastPt = lastLine.points[lastLine.points.length - 1];
+                const cell = this.grid[lastPt.r][lastPt.c];
+                if (cell.val !== null) {
+                    startNode = lastPt;
+                    startVal = cell.val;
+                }
+            } else {
+                for(let r=0; r<this.gridSize; r++) {
+                    for(let c=0; c<this.gridSize; c++) {
+                        if (this.grid[r][c].val === 1) {
+                            startNode = {r, c};
+                            startVal = 1;
+                            break;
+                        }
+                    }
+                    if (startNode) break;
+                }
+            }
+
+            if (startNode) {
+                this.isDrawing = true;
+                this.currentDragLine = { 
+                    startVal: startVal, 
+                    points: [{r: startNode.r, c: startNode.c}], 
+                    widthScale: 0.45 
+                };
+                this.draw();
+            } else {
+                return;
+            }
+        }
+
+        const pts = this.currentDragLine.points;
+        const head = pts[pts.length - 1];
+        const r = head.r + dr;
+        const c = head.c + dc;
+
+        if (!this.isValidCell(r, c)) return;
+
+        this.attemptMove(r, c);
+    }
+
     isValidCell(r, c) { return r >= 0 && r < this.gridSize && c >= 0 && c < this.gridSize; }
+
     isCellOccupied(r, c) {
         if (this.grid[r][c].type === 'fixed') return true;
 
@@ -824,6 +796,7 @@ class Game {
     }
     
     undo() { if (this.userLines.length > 0 && !this.isWinning) { this.userLines.pop(); this.draw(); } }
+
     resetLevel() { if (!this.isWinning) { this.userLines = []; this.draw(); } }
 
     useHint() {
@@ -867,6 +840,22 @@ class Game {
         setTimeout(() => this.draw(), 2000);
     }
 
+    checkDailyHint() {
+        const today = new Date().toDateString();
+        if (this.lastHintDate === null) {
+            this.lastHintDate = today;
+            this.saveProgress();
+            return;
+        }
+        if (this.lastHintDate !== today) {
+            this.hints = 2; 
+            this.lastHintDate = today;
+            alert("New Day! Hints reset to 2.");
+            this.saveProgress();
+        }
+    }
+
+    // Check Win and Animation Methods
     checkWin() {
         const set = new Set();
         this.grid.forEach((row, r) => row.forEach((cell, c) => { if(cell.type === 'fixed') set.add(`${r},${c}`); }));
@@ -888,6 +877,7 @@ class Game {
 
         this.triggerWinSequence();
     }
+
     triggerWinSequence() {
         this.isWinning = true;
         const pathLines = this.userLines;
@@ -897,6 +887,7 @@ class Game {
         this.winFrame = 0; this.totalWinFrames = 120; 
         requestAnimationFrame(() => this.animateWinLoop());
     }
+
     animateWinLoop() {
         if (!this.isWinning) return;
         this.winFrame++;
@@ -905,6 +896,7 @@ class Game {
         if (this.winFrame < this.totalWinFrames) { requestAnimationFrame(() => this.animateWinLoop()); } 
         else { setTimeout(() => this.handleLevelComplete(), 500); }
     }
+
     handleLevelComplete() {
         const msg = document.getElementById('message-area');
         msg.innerText = "Level Complete!";
@@ -1217,17 +1209,7 @@ class Game {
         this.draw();
     }
 
-    checkOrientation() {
-        if (!this.isMobile) return;
-
-        const overlay = document.getElementById('orientation-lock');
-        if (window.innerWidth > window.innerHeight) {
-            overlay.style.display = 'flex';
-        } else {
-            overlay.style.display = 'none';
-        }
-    }
-
+    // Misc Methods
     initContact() {
         const contactDiv = document.getElementById('contact-corner');
         const email = "luongdtran06@gmail.com";

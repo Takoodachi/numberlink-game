@@ -13,6 +13,7 @@
     --pop-shadow: 0 4px 0 rgba(0,0,0,0.2);
 }
 
+/* Dark Mode */
 body.dark-mode {
     --bg-color: #111827;
     --grid-bg: #1f2937;
@@ -27,6 +28,7 @@ body.dark-mode {
     --on-accent: #111827;
 }
 
+/* Mobile Layout */
 html, body.mobile-layout {
     overflow: hidden !important;
     position: fixed;
@@ -102,6 +104,7 @@ body {
     transition: background-color 0.3s ease;
 }
 
+/* Theme Toggle */
 #theme-toggle {
     position: fixed;
     bottom: 20px;
@@ -119,6 +122,7 @@ body {
 
 #theme-toggle:hover { transform: scale(1.1) rotate(15deg); }
 
+/* Rules Container */
 #rules-container {
     position: fixed;
     top: 15px; 
@@ -207,6 +211,7 @@ body.dark-mode #rules-panel {
     font-weight: bold;
 }
 
+/* Headers */
 header {
     text-align: center;
     margin-bottom: 10px;
@@ -224,6 +229,7 @@ h1 {
     pointer-events: auto;
 }
 
+/* Hints */
 #stats {
     margin-top: 5px;
     display: flex;
@@ -235,6 +241,7 @@ h1 {
     opacity: 0.8;
 }
 
+/* Game Area */
 #game-wrapper {
     position: relative;
     background: var(--grid-bg);
@@ -261,6 +268,7 @@ canvas {
     touch-action: none;
 }
 
+/* Message Area */
 #message-area {
     height: 40px;
     margin-top: 15px;
@@ -282,6 +290,7 @@ canvas {
 
 @keyframes shine { to { background-position: 200% center; } }
 
+/* Game Controls */
 #ui-controls {
     margin-top: 15px;
     display: flex;
@@ -289,6 +298,7 @@ canvas {
     z-index: 10;
 }
 
+/* Button Design */
 button.game-btn {
     padding: 12px 24px;
     border: none;
@@ -318,6 +328,7 @@ button.game-btn:active {
     color: var(--btn-text); 
 }
 
+/* Level Indicator */
 .level-indicator {
     background: var(--btn-bg);
     color: var(--text-color);
@@ -336,6 +347,32 @@ button.game-btn:active {
 .level-indicator:active { 
     transform: translateY(2px); 
     box-shadow: none; 
+}
+
+/* Level Selector */
+#level-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+    gap: 10px;
+    overflow-y: auto;
+    padding: 15px;
+}
+
+#level-grid::-webkit-scrollbar { width: 10px; }
+
+#level-grid::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
+body.dark-mode #level-grid::-webkit-scrollbar-thumb { border-color: var(--panel-bg, #2d3748); }
+
+#level-grid::-webkit-scrollbar-track {
+    background: transparent;
+    border-radius: 8px;
+}
+
+#level-grid::-webkit-scrollbar-thumb {
+    background: var(--btn-bg);
+    border-radius: 8px;
+    border: 2px solid var(--panel-bg, #ffffff); 
 }
 
 .search-container {
@@ -398,6 +435,7 @@ body.dark-mode .level-search-input { border-color: #4b5563; }
     box-shadow: none;
 }
 
+/* Modal Design */
 .modal-overlay {
     position: fixed;
     top: 0; left: 0;
@@ -436,20 +474,13 @@ body.dark-mode .level-search-input { border-color: #4b5563; }
     color: var(--text-color); 
 }
 
+/* Buttons */
 #close-level-btn {
     background: none; 
     border: none; 
     font-size: 1.5rem; 
     cursor: pointer; 
     color: var(--text-color);
-}
-
-#level-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
-    gap: 10px;
-    overflow-y: auto;
-    padding: 15px;
 }
 
 .lvl-btn {
@@ -476,30 +507,12 @@ body.dark-mode .level-search-input { border-color: #4b5563; }
 
 .lvl-btn.completed { border: 2px solid var(--accent); }
 
-#level-grid::-webkit-scrollbar { width: 10px; }
-
-#level-grid::-webkit-scrollbar-track {
-    background: transparent;
-    border-radius: 8px;
-}
-
-#level-grid::-webkit-scrollbar-thumb {
-    background: var(--btn-bg);
-    border-radius: 8px;
-    border: 2px solid var(--panel-bg, #ffffff); 
-}
-
-#level-grid::-webkit-scrollbar-thumb:hover { background: var(--accent); }
-
-body.dark-mode #level-grid::-webkit-scrollbar-thumb {
-    border-color: var(--panel-bg, #2d3748);
-}
-
 body.dark-mode .lvl-btn.locked { 
     background: #374151; 
     opacity: 0.3; 
 }
 
+/* Congratulations Design */
 #confetti-canvas {
     position: fixed;
     top: 0;
@@ -513,6 +526,7 @@ body.dark-mode .lvl-btn.locked {
 
 #confetti-canvas.active { display: block;}
 
+/* Orientation Check */
 #orientation-lock {
     display: none;
     position: fixed;
@@ -541,6 +555,7 @@ body.dark-mode .lvl-btn.locked {
     100% { transform: rotate(-90deg); }
 }
 
+/* Authentication Modal and Button */
 .auth-top-right {
     position: absolute;
     top: 15px;
@@ -614,6 +629,7 @@ body.dark-mode .auth-input { border-color: #4b5563; }
     margin: 0;
 }
 
+/* Conflict Modal */
 .conflict-body {
     padding: 15px 20px 0;
     text-align: center;
@@ -672,6 +688,7 @@ body.dark-mode .auth-input { border-color: #4b5563; }
     color: var(--text-color);
 }
 
+/* Profile Modal and Button */
 .profile-body {
     padding: 20px;
     color: var(--text-color);
@@ -711,6 +728,7 @@ body.dark-mode .auth-input { border-color: #4b5563; }
     color: var(--text-color);
 }
 
+/* Contact */
 .contact-corner {
     position: fixed;
     bottom: 15px;
@@ -753,6 +771,7 @@ body.mobile-layout .contact-corner {
     }
 }
 
+/* Splash Screen */
 .web-splash {
     position: fixed;
     top: 0;

@@ -209,7 +209,7 @@ class Game {
         continueBtn.onclick = dismissPrompt;
         
         downloadBtn.onclick = () => {
-            window.open('https://github.com/your-username/number-link/releases/latest/download/app.apk', '_blank'); 
+            window.open('https://github.com/Takoodachi/numberlink-game/releases/tag/Android_App', '_blank'); 
             dismissPrompt();
         };
 

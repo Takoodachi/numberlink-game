@@ -48,6 +48,8 @@ class Game {
         this.maxNumber = 0;
         this.hints = 2;
         this.gridSize = 5;
+        this.streak = 0;
+        this.lastLoginDate = null;
 
         this.confettiParticles = [];
         this.allLevels = [];
@@ -181,13 +183,32 @@ class Game {
                 this.isDevMode = false; 
                 authBtn.innerText = loggedOutText;
                 await this.loadProgress();
+                
+                const today = new Date();
+                const isMonday = today.getDay() === 1; 
+                const todayString = today.toDateString(); 
+                const lastPromptedDate = localStorage.getItem('lastPromoMonday');
+                const hasSeenInitialPromo = localStorage.getItem('hasSeenInitialPromo');
 
-                if (!this.hasPromptedLogin) {
+                let shouldShowPromo = false;
+
+                if (!hasSeenInitialPromo && !this.hasPromptedLogin) {
+                    shouldShowPromo = true;
+                    localStorage.setItem('hasSeenInitialPromo', 'true');
+                    localStorage.setItem('lastPromoMonday', todayString); 
+                } 
+                else if (isMonday && lastPromptedDate !== todayString && !this.hasPromptedLogin) {
+                    shouldShowPromo = true;
+                    localStorage.setItem('lastPromoMonday', todayString);
+                }
+
+                if (shouldShowPromo) {
                     this.hasPromptedLogin = true;
                     
                     setTimeout(() => {
-                        document.getElementById('promo-modal').classList.add('open');
-                    }, 3000); 
+                        const promoModal = document.getElementById('promo-modal');
+                        if (promoModal) promoModal.classList.add('open');
+                    }, 100); 
                 }
             }
         });
@@ -378,6 +399,8 @@ class Game {
             this.maxUnlockedIndex = data.maxUnlockedIndex || 0;
             this.hints = data.hints !== undefined ? data.hints : 2;
             this.lastHintDate = data.lastHintDate;
+            this.streak = data.streak || 0;
+            this.lastLoginDate = data.lastLoginDate || null;
         }
 
         if (this.currentUser) {
@@ -410,6 +433,7 @@ class Game {
         }
         
         this.checkDailyHint();
+        this.checkDailyStreak()
     }
 
     applyCloudData(cloudData) {
@@ -417,6 +441,8 @@ class Game {
         this.maxUnlockedIndex = cloudData.maxUnlockedIndex;
         this.hints = cloudData.hints;
         this.lastHintDate = cloudData.lastHintDate;
+        this.streak = cloudData.streak || 0;
+        this.lastLoginDate = cloudData.lastLoginDate || null;
         
         localStorage.setItem('linkGameData', JSON.stringify(cloudData));
         this.updateUI();
@@ -456,7 +482,9 @@ class Game {
             currentLevelIndex: this.currentLevelIndex,
             maxUnlockedIndex: this.maxUnlockedIndex,
             hints: this.hints,
-            lastHintDate: this.lastHintDate
+            lastHintDate: this.lastHintDate,
+            streak: this.streak,
+            lastLoginDate: this.lastLoginDate
         };
         
         localStorage.setItem('linkGameData', JSON.stringify(data));
@@ -1014,6 +1042,31 @@ class Game {
         }
     }
 
+    checkDailyStreak() {
+        if (!this.currentUser) return;
+
+        const today = new Date();
+        const todayString = today.toDateString();
+        
+        const yesterday = new Date(today);
+        yesterday.setDate(today.getDate() - 1);
+        const yesterdayString = yesterday.toDateString();
+
+        if (!this.lastLoginDate) {
+            this.streak = 1;
+            this.lastLoginDate = todayString;
+            this.saveProgress();
+        } else if (this.lastLoginDate !== todayString) {
+            if (this.lastLoginDate === yesterdayString) {
+                this.streak++;
+            } else {
+                this.streak = 1;
+            }
+            this.lastLoginDate = todayString;
+            this.saveProgress();
+        }
+    }
+
     // Check Win and Animation Methods
     checkWin() {
         const set = new Set();
@@ -1091,6 +1144,16 @@ class Game {
         }
         
         document.getElementById('hints-display').innerText = this.isDevMode ? `Hints: ∞ (Dev)` : `Hints: ${this.hints}`;
+
+        const streakDisplay = document.getElementById('streak-display');
+        if (streakDisplay) {
+            if (this.currentUser) {
+                streakDisplay.style.display = 'inline';
+                streakDisplay.innerText = `🔥 ${this.streak}`;
+            } else {
+                streakDisplay.style.display = 'none';
+            }
+        }
         
         const answerBtn = document.getElementById('btn-show-answer');
 

@@ -138,43 +138,138 @@ body.dark-mode {
     }
 }
 
-/* Gamemode Sidebar */
-#gamemode-sidebar {
+/* Carousel UI */
+#carousel-overlay {
     position: fixed;
-    top: 70px;
-    right: 15px;
-    width: 220px;
-    background-color: var(--panel-bg);
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: var(--bg-color);
+    z-index: 2000;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    transition: opacity 0.4s ease, visibility 0.4s ease;
+}
+
+#carousel-overlay.hidden {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+}
+
+.carousel-title {
+    position: absolute;
+    top: 8vh;
+    font-size: 2.5rem;
+    font-weight: 800;
+    color: var(--text-color);
+    text-shadow: 0 4px 20px rgba(79, 70, 229, 0.3);
+    z-index: 10;
+}
+
+.carousel-container {
+    position: relative;
+    width: 100%;
+    max-width: 800px;
+    height: 400px;
+    perspective: 1200px;
+    transform-style: preserve-3d;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+}
+
+.carousel-board {
+    position: absolute;
+    width: 260px;
+    height: 320px;
+    background: var(--panel-bg);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
-    padding: 20px;
     border-radius: 20px;
     box-shadow: var(--shadow);
     border: 1px solid rgba(255, 255, 255, 0.2);
-    transform: translateX(150%);
-    transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
-    z-index: 300;
     display: flex;
     flex-direction: column;
-    gap: 12px;
-}
-
-body.dark-mode #gamemode-sidebar {
-    border-color: #4b5563;
-    box-shadow: -5px 5px 20px rgba(0, 0, 0, 0.8);
-}
-
-#gamemode-sidebar.open {
-    transform: translateX(0);
-}
-
-.gamemode-btn {
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
     text-align: center;
-    width: 100%;
+    transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.5s ease-in-out, filter 0.3s ease;
+    transform-origin: center center;
+    will-change: transform, opacity;
+    cursor: none;
+    pointer-events: auto;
 }
 
-body.mobile-layout #gamemode-sidebar {
-    top: 100px;
+.carousel-board:not(.center):hover {
+    filter: brightness(1.1);
+}
+
+body.dark-mode .carousel-board {
+    border-color: #4b5563;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);
+}
+
+.mode-icon {
+    font-size: 3rem;
+    margin-bottom: 5px;
+    filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.15));
+}
+
+.carousel-board h3 {
+    margin: 0 0 10px 0;
+    color: var(--text-color);
+    font-size: 1.8rem;
+}
+
+.carousel-board p {
+    color: var(--text-color);
+    opacity: 0.8;
+    margin-bottom: 25px;
+    font-size: 1rem;
+    flex-grow: 1;
+}
+
+.carousel-choose-btn {
+    width: 80%;
+    font-size: 1.2rem;
+    padding: 12px;
+}
+
+.carousel-nav {
+    position: absolute;
+    bottom: 8vh;
+    display: flex;
+    gap: 20px;
+    z-index: 10;
+}
+
+.carousel-nav button {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    font-size: 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.carousel-board.zoom-in {
+    transform: translateX(0) translateZ(600px) scale(2.5) !important;
+    opacity: 0 !important;
+}
+
+#carousel-overlay.hiding .carousel-nav,
+#carousel-overlay.hiding .carousel-title,
+#carousel-overlay.hiding .carousel-board:not(.center) {
+    opacity: 0 !important;
+    transition: opacity 0.3s ease;
 }
 
 /* Word Definition Sidebar */
@@ -467,6 +562,18 @@ h1 {
     -webkit-text-fill-color: transparent;
     text-shadow: 0 4px 20px rgba(79, 70, 229, 0.3);
     pointer-events: auto;
+    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    display: inline-block;
+}
+
+.title-row:hover h1 {
+    transform: translateY(-2px) scale(1.05);
+    filter: brightness(1.1);
+    text-shadow: 0 8px 25px rgba(79, 70, 229, 0.5);
+}
+
+.title-row:active h1 {
+    transform: translateY(2px) scale(0.95);
 }
 
 /* Hints */

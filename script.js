@@ -95,7 +95,7 @@ class Game {
         this.fetchLevels();
         this.initAuth();
         this.initContact();
-        this.initGameModes();
+        this.initCarousel();
         this.fetchWordLevels();
     }
 
@@ -111,12 +111,6 @@ class Game {
         });
 
         const authBtn = document.getElementById('auth-btn');
-        const sidebar = document.getElementById('gamemode-sidebar');
-
-        if (!localStorage.getItem('gamemodeSidebarVisited')) {
-            sidebar.classList.add('open');
-            localStorage.setItem('gamemodeSidebarVisited', 'true');
-        }
 
         const wordSidebar = document.getElementById('word-def-sidebar');
         document.getElementById('close-word-def-btn').onclick = () => wordSidebar.classList.remove('open');
@@ -126,21 +120,14 @@ class Game {
             }
         });
 
-        authBtn.onclick = (e) => {
-            e.stopPropagation();
-            sidebar.classList.toggle('open');
-        };
-
-        document.addEventListener('click', (e) => {
-            if (sidebar.classList.contains('open') && !sidebar.contains(e.target) && !authBtn.contains(e.target)) {
-                sidebar.classList.remove('open');
-            }
-        });
-
-        document.getElementById('sidebar-auth-trigger').onclick = () => {
-            sidebar.classList.remove('open');
+        authBtn.onclick = () => {
             this.toggleAuth();
         };
+
+        const titleRow = document.querySelector('.title-row');
+        if (titleRow) {
+            titleRow.onclick = () => this.openCarousel();
+        }
 
         document.getElementById('close-auth-btn').onclick = () => document.getElementById('auth-modal').classList.remove('open');
         document.getElementById('auth-submit-btn').onclick = () => this.handleAuthSubmit();
@@ -304,7 +291,7 @@ class Game {
         };
         render();
 
-        const interactable = 'button, a, .level-indicator, .auth-toggle span, .contact-corner, .lvl-btn, .tab-btn';
+        const interactable = 'button, a, .level-indicator, .auth-toggle span, .contact-corner, .lvl-btn, .tab-btn, .title-row';
         document.addEventListener('mouseover', (e) => {
             if (e.target.closest(interactable)) dot.classList.add('cursor-hover');
         });
@@ -318,7 +305,7 @@ class Game {
         const authBtn = document.getElementById('auth-btn');
         const sidebarAuthBtn = document.getElementById('sidebar-auth-trigger');
 
-        authBtn.innerText = this.isMobile ? "☰" : "Menu";
+        authBtn.innerText = this.isMobile ? "Profile" : "Profile / Settings";
 
         onAuthStateChanged(auth, async (user) => {
             if (user) {
@@ -1041,19 +1028,112 @@ class Game {
         this.draw();
     }
 
-    initGameModes() {
-        const modeButtons = document.querySelectorAll('.gamemode-btn');
-        const modes = ['classic', 'speedrun', 'blindfold', 'optimal', 'words'];
+    initCarousel() {
+        this.carouselOverlay = document.getElementById('carousel-overlay');
+        this.carouselBoards = Array.from(document.querySelectorAll('.carousel-board'));
+        this.carouselPrevBtn = document.getElementById('carousel-prev');
+        this.carouselNextBtn = document.getElementById('carousel-next');
+        this.carouselModes = ['classic', 'speedrun', 'blindfold', 'optimal', 'words'];
+        
+        this.carouselIndex = this.carouselModes.indexOf(this.currentMode);
+        if (this.carouselIndex === -1) this.carouselIndex = 0;
 
-        modeButtons.forEach((btn, index) => {
-            btn.onclick = () => {
-                this.setGameMode(modes[index]); // Simplified!
+        this.updateCarouselTransforms();
 
-                if (this.isMobile) {
-                    document.getElementById('gamemode-sidebar').classList.remove('open');
+        this.carouselPrevBtn.onclick = () => this.moveCarousel(-1);
+        this.carouselNextBtn.onclick = () => this.moveCarousel(1);
+
+        this.carouselBoards.forEach((board, index) => {
+            const btn = board.querySelector('.carousel-choose-btn');
+            btn.onclick = (e) => {
+                e.stopPropagation();
+                if (this.carouselIndex === index) {
+                    this.chooseCarouselMode(index);
+                } else {
+                    this.carouselIndex = index;
+                    this.updateCarouselTransforms();
+                }
+            };
+            board.onclick = () => {
+                if (this.carouselIndex !== index) {
+                    this.carouselIndex = index;
+                    this.updateCarouselTransforms();
                 }
             };
         });
+
+        window.addEventListener('keydown', (e) => {
+            if (this.carouselOverlay && !this.carouselOverlay.classList.contains('hidden')) {
+                if (e.key === 'ArrowLeft') this.moveCarousel(-1);
+                if (e.key === 'ArrowRight') this.moveCarousel(1);
+                if (e.key === 'Enter') this.chooseCarouselMode(this.carouselIndex);
+            }
+        });
+    }
+
+    openCarousel() {
+        this.carouselIndex = this.carouselModes.indexOf(this.currentMode);
+        if (this.carouselIndex === -1) this.carouselIndex = 0;
+        
+        this.carouselBoards.forEach(board => {
+            board.classList.remove('zoom-in');
+            board.style.opacity = '';
+            board.style.pointerEvents = 'auto';
+        });
+        this.carouselOverlay.classList.remove('hiding', 'hidden');
+        this.updateCarouselTransforms();
+    }
+
+    moveCarousel(dir) {
+        this.carouselIndex += dir;
+        if (this.carouselIndex < 0) this.carouselIndex = this.carouselBoards.length - 1;
+        if (this.carouselIndex >= this.carouselBoards.length) this.carouselIndex = 0;
+        this.updateCarouselTransforms();
+    }
+
+    updateCarouselTransforms() {
+        this.carouselBoards.forEach((board, index) => {
+            let diff = index - this.carouselIndex;
+            
+            // Handle wrap-around for smooth 3D effect
+            if (diff > this.carouselBoards.length / 2) diff -= this.carouselBoards.length;
+            if (diff < -this.carouselBoards.length / 2) diff += this.carouselBoards.length;
+
+            board.classList.remove('center');
+
+            if (diff === 0) {
+                board.style.transform = `translateX(0) translateZ(0) rotateY(0)`;
+                board.style.opacity = 1;
+                board.style.zIndex = 10;
+                board.classList.add('center');
+            } else {
+                const sign = Math.sign(diff);
+                const absDiff = Math.abs(diff);
+                
+                // Adjust translation and rotation based on distance
+                const tx = sign * (160 + absDiff * 60);
+                const tz = -absDiff * 150;
+                const ry = -sign * 25;
+                
+                board.style.transform = `translateX(${tx}px) translateZ(${tz}px) rotateY(${ry}deg) scale(${1 - absDiff * 0.1})`;
+                board.style.opacity = 1 - absDiff * 0.3;
+                board.style.zIndex = 10 - absDiff;
+            }
+        });
+    }
+
+    chooseCarouselMode(index) {
+        const board = this.carouselBoards[index];
+        this.carouselOverlay.classList.add('hiding');
+        board.classList.add('zoom-in');
+        
+        board.style.pointerEvents = 'none';
+
+        setTimeout(() => {
+            this.carouselOverlay.classList.remove('hiding');
+            this.carouselOverlay.classList.add('hidden');
+            this.setGameMode(this.carouselModes[index]);
+        }, 500);
     }
 
     setGameMode(mode, isInitialLoad = false) {
@@ -1112,6 +1192,11 @@ class Game {
         const targetMode = this.currentMode || 'classic';
         this.currentMode = null;
         this.setGameMode(targetMode, true);
+        if (this.carouselOverlay && !this.carouselOverlay.classList.contains('hidden')) {
+            this.carouselIndex = this.carouselModes.indexOf(targetMode);
+            if (this.carouselIndex === -1) this.carouselIndex = 0;
+            this.updateCarouselTransforms();
+        }
     }
 
     startSpeedrun() {

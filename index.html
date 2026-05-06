@@ -46,37 +46,46 @@
     <button id="auth-btn" class="game-btn btn-secondary auth-top-right"></button>
 
     <div id="carousel-overlay" class="carousel-overlay">
-        <h2 class="carousel-title">Select Game Mode</h2>
         <div class="carousel-container">
             <div class="carousel-board" data-mode="classic">
-                <div class="mode-icon">🧩</div>
-                <h3>Number Link</h3>
-                <p>The classic puzzle experience.</p>
-                <button class="game-btn btn-primary carousel-choose-btn">Play</button>
+                <div class="carousel-card-header">
+                    <span class="carousel-mode-label">Number Link</span>
+                    <button class="carousel-card-rules-btn">i</button>
+                </div>
+                <div class="mini-board-slot"></div>
+                <button class="game-btn btn-primary carousel-choose-btn">Play!</button>
             </div>
             <div class="carousel-board" data-mode="speedrun">
-                <div class="mode-icon">⏱️</div>
-                <h3>Speedrun</h3>
-                <p>Race against the clock.</p>
-                <button class="game-btn btn-primary carousel-choose-btn">Play</button>
+                <div class="carousel-card-header">
+                    <span class="carousel-mode-label">Speedrun</span>
+                    <button class="carousel-card-rules-btn">i</button>
+                </div>
+                <div class="mini-board-slot"></div>
+                <button class="game-btn btn-primary carousel-choose-btn">Play!</button>
             </div>
             <div class="carousel-board" data-mode="blindfold">
-                <div class="mode-icon">🕶️</div>
-                <h3>Blindfold</h3>
-                <p>Lines disappear as you draw.</p>
-                <button class="game-btn btn-primary carousel-choose-btn">Play</button>
+                <div class="carousel-card-header">
+                    <span class="carousel-mode-label">Blindfold</span>
+                    <button class="carousel-card-rules-btn">i</button>
+                </div>
+                <div class="mini-board-slot"></div>
+                <button class="game-btn btn-primary carousel-choose-btn">Play!</button>
             </div>
             <div class="carousel-board" data-mode="optimal">
-                <div class="mode-icon">✨</div>
-                <h3>Optimal Path</h3>
-                <p>Find the shortest routes.</p>
-                <button class="game-btn btn-primary carousel-choose-btn">Play</button>
+                <div class="carousel-card-header">
+                    <span class="carousel-mode-label">Optimal Path</span>
+                    <button class="carousel-card-rules-btn">i</button>
+                </div>
+                <div class="mini-board-slot"></div>
+                <button class="game-btn btn-primary carousel-choose-btn">Play!</button>
             </div>
             <div class="carousel-board" data-mode="words">
-                <div class="mode-icon">🔠</div>
-                <h3>Connecting Letters</h3>
-                <p>Link letters to form words.</p>
-                <button class="game-btn btn-primary carousel-choose-btn">Play</button>
+                <div class="carousel-card-header">
+                    <span class="carousel-mode-label">Connecting Letters</span>
+                    <button class="carousel-card-rules-btn">i</button>
+                </div>
+                <div class="mini-board-slot"></div>
+                <button class="game-btn btn-primary carousel-choose-btn">Play!</button>
             </div>
         </div>
         <div class="carousel-nav">
@@ -174,6 +183,7 @@
                 </p>
                 <p class="profile-stat"><strong>Current Level:</strong> <span id="profile-level"></span></p>
 
+                <button id="profile-settings-btn" class="game-btn btn-secondary">Settings</button>
                 <button id="profile-logout-btn" class="game-btn btn-primary logout-btn-red">Logout</button>
             </div>
         </div>
@@ -214,6 +224,47 @@
                 <button id="btn-keep-local" class="conflict-btn local-btn">
                     Keep Local Progress<br><small>(<span id="conflict-local-text">Level ?</span>)</small>
                 </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="settings-modal" class="modal-overlay">
+        <div class="modal-content auth-modal-content">
+            <div class="modal-header">
+                <h2>Settings</h2>
+                <button id="close-settings-btn">✖</button>
+            </div>
+            <div class="settings-body">
+                <div class="settings-row">
+                    <div class="settings-label">
+                        <span class="settings-label-title">Toast Notifications</span>
+                        <span class="settings-label-desc">Show achievement messages</span>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="settings-toasts" checked>
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+                <div class="settings-row">
+                    <div class="settings-label">
+                        <span class="settings-label-title">Confetti</span>
+                        <span class="settings-label-desc">Celebrate level completion</span>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="settings-confetti" checked>
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+                <div class="settings-row">
+                    <div class="settings-label">
+                        <span class="settings-label-title">Cursor Trail</span>
+                        <span class="settings-label-desc">Custom cursor with trail effect</span>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="settings-cursor-trail" checked>
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
             </div>
         </div>
     </div>

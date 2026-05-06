@@ -76,6 +76,7 @@ class Game {
         this.hasPromptedLogin = false;
         this.isSpeedrunActive = false;
         this.isLoginMode = true;
+        this.carouselCanDismiss = false;
         this.lastLoginDate = null;
         this.currentUser = null;
         this.searchTimeout = null;
@@ -84,8 +85,11 @@ class Game {
 
         this.colors = ['#6d28d9', '#ef4444', '#059669', '#2563eb', '#db2777', '#d97706', '#0891b2'];
 
+        this.settings = this.loadSettings();
+
         this.initEventListeners();
         this.initCursorEffect();
+        this.initSettings();
 
         this.initLeaderboard();
         this.initRulesModal();
@@ -205,10 +209,12 @@ class Game {
         const dot = document.createElement('div');
         dot.id = 'cursor-dot';
         document.body.appendChild(dot);
+        this.cursorDot = dot;
 
         const trailCanvas = document.createElement('canvas');
         trailCanvas.id = 'cursor-trail-canvas';
         document.body.appendChild(trailCanvas);
+        this.cursorTrailCanvas = trailCanvas;
         const trailCtx = trailCanvas.getContext('2d');
 
         const resize = () => {
@@ -1034,9 +1040,28 @@ class Game {
         this.carouselPrevBtn = document.getElementById('carousel-prev');
         this.carouselNextBtn = document.getElementById('carousel-next');
         this.carouselModes = ['classic', 'speedrun', 'blindfold', 'optimal', 'words'];
-        
+
         this.carouselIndex = this.carouselModes.indexOf(this.currentMode);
         if (this.carouselIndex === -1) this.carouselIndex = 0;
+
+        // Inject mini boards and wire rules buttons
+        this.carouselBoards.forEach((board, index) => {
+            const mode = this.carouselModes[index];
+            const slot = board.querySelector('.mini-board-slot');
+            if (slot) slot.innerHTML = this.generateMiniBoardHTML(mode);
+
+            const rulesBtn = board.querySelector('.carousel-card-rules-btn');
+            if (rulesBtn) {
+                rulesBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const savedMode = this.currentMode;
+                    this.currentMode = mode;
+                    this.updateRulesUI();
+                    this.currentMode = savedMode;
+                    document.getElementById('rules-modal').classList.add('open');
+                });
+            }
+        });
 
         this.updateCarouselTransforms();
 
@@ -1062,11 +1087,21 @@ class Game {
             };
         });
 
+        // Dismiss overlay by clicking the dark backdrop (only after first Play!)
+        this.carouselOverlay.addEventListener('click', (e) => {
+            if (e.target === this.carouselOverlay && this.carouselCanDismiss) {
+                this.carouselOverlay.classList.add('hidden');
+            }
+        });
+
         window.addEventListener('keydown', (e) => {
             if (this.carouselOverlay && !this.carouselOverlay.classList.contains('hidden')) {
                 if (e.key === 'ArrowLeft') this.moveCarousel(-1);
                 if (e.key === 'ArrowRight') this.moveCarousel(1);
                 if (e.key === 'Enter') this.chooseCarouselMode(this.carouselIndex);
+                if (e.key === 'Escape' && this.carouselCanDismiss) {
+                    this.carouselOverlay.classList.add('hidden');
+                }
             }
         });
     }
@@ -1074,7 +1109,7 @@ class Game {
     openCarousel() {
         this.carouselIndex = this.carouselModes.indexOf(this.currentMode);
         if (this.carouselIndex === -1) this.carouselIndex = 0;
-        
+
         this.carouselBoards.forEach(board => {
             board.classList.remove('zoom-in');
             board.style.opacity = '';
@@ -1082,6 +1117,61 @@ class Game {
         });
         this.carouselOverlay.classList.remove('hiding', 'hidden');
         this.updateCarouselTransforms();
+    }
+
+    generateMiniBoardHTML(mode) {
+        const S = 5;
+        const cfgs = {
+            classic: { nodes: [
+                {r:0,c:0,cl:'#ef4444'},{r:4,c:4,cl:'#ef4444'},
+                {r:0,c:4,cl:'#2563eb'},{r:4,c:0,cl:'#2563eb'},
+                {r:2,c:1,cl:'#059669'},{r:2,c:3,cl:'#059669'},
+            ]},
+            speedrun: { nodes: [
+                {r:0,c:0,cl:'#d97706'},{r:3,c:4,cl:'#d97706'},
+                {r:0,c:3,cl:'#0891b2'},{r:4,c:1,cl:'#0891b2'},
+                {r:1,c:4,cl:'#db2777'},{r:4,c:4,cl:'#db2777'},
+            ]},
+            blindfold: { fog: true, nodes: [
+                {r:0,c:2,cl:'#6d28d9'},{r:4,c:2,cl:'#6d28d9'},
+                {r:1,c:0,cl:'#ef4444'},{r:3,c:4,cl:'#ef4444'},
+                {r:0,c:4,cl:'#059669'},{r:4,c:0,cl:'#059669'},
+            ]},
+            optimal: { nodes: [
+                {r:0,c:0,cl:'#ef4444'},{r:4,c:4,cl:'#ef4444'},
+                {r:0,c:4,cl:'#2563eb'},{r:4,c:0,cl:'#2563eb'},
+            ]},
+            words: { nodes: [
+                {r:1,c:0,cl:'#6d28d9'},{r:3,c:4,cl:'#6d28d9'},
+            ], letters: [
+                [0,0,'W'],[0,1,'O'],[0,2,'R'],[0,3,'D'],[0,4,'S'],
+                [1,1,'I'],[1,2,'N'],[1,3,'K'],[1,4,'S'],
+                [2,0,'P'],[2,1,'L'],[2,2,'A'],[2,3,'Y'],[2,4,'!'],
+                [3,0,'G'],[3,1,'A'],[3,2,'M'],[3,3,'E'],
+                [4,0,'T'],[4,1,'I'],[4,2,'M'],[4,3,'E'],[4,4,'S'],
+            ]},
+        };
+        const cfg = cfgs[mode] || cfgs.classic;
+        const nodeMap = new Map(cfg.nodes.map(n => [`${n.r},${n.c}`, n.cl]));
+        const letterMap = cfg.letters
+            ? new Map(cfg.letters.map(([r, c, l]) => [`${r},${c}`, l]))
+            : new Map();
+        const fogCls = cfg.fog ? ' mini-board-blindfold' : '';
+        let html = `<div class="mini-board mini-board-${mode}${fogCls}">`;
+        for (let r = 0; r < S; r++) {
+            for (let c = 0; c < S; c++) {
+                const key = `${r},${c}`;
+                if (nodeMap.has(key)) {
+                    html += `<div class="mb-cell"><div class="mb-node" style="background:${nodeMap.get(key)}"></div></div>`;
+                } else if (letterMap.has(key)) {
+                    html += `<div class="mb-cell mb-letter">${letterMap.get(key)}</div>`;
+                } else {
+                    html += `<div class="mb-cell"></div>`;
+                }
+            }
+        }
+        html += '</div>';
+        return html;
     }
 
     moveCarousel(dir) {
@@ -1124,16 +1214,16 @@ class Game {
 
     chooseCarouselMode(index) {
         const board = this.carouselBoards[index];
+        this.carouselCanDismiss = true;
         this.carouselOverlay.classList.add('hiding');
         board.classList.add('zoom-in');
-        
         board.style.pointerEvents = 'none';
 
         setTimeout(() => {
             this.carouselOverlay.classList.remove('hiding');
             this.carouselOverlay.classList.add('hidden');
             this.setGameMode(this.carouselModes[index]);
-        }, 500);
+        }, 600);
     }
 
     setGameMode(mode, isInitialLoad = false) {
@@ -2079,6 +2169,7 @@ class Game {
     }
 
     startCelebration() {
+        if (!this.settings.confetti) return;
         this.isCelebrating = true;
         this.confettiCanvas.classList.add('active');
         this.confettiCanvas.width = window.innerWidth;
@@ -2142,6 +2233,7 @@ class Game {
     }
 
     showToast(message, duration = 3000) {
+        if (!this.settings.toasts) return;
         let container = document.getElementById('toast-container');
         if (!container) return;
 
@@ -2165,6 +2257,68 @@ class Game {
             }, 400);
 
         }, duration);
+    }
+
+    // Settings Methods
+    loadSettings() {
+        const defaults = { toasts: true, confetti: true, cursorTrail: true };
+        try {
+            const saved = JSON.parse(localStorage.getItem('gameSettings') || '{}');
+            return { ...defaults, ...saved };
+        } catch {
+            return defaults;
+        }
+    }
+
+    saveSettings() {
+        localStorage.setItem('gameSettings', JSON.stringify(this.settings));
+    }
+
+    applyCursorTrailSetting() {
+        if (!this.cursorDot || !this.cursorTrailCanvas) return;
+        if (this.settings.cursorTrail) {
+            this.cursorDot.style.display = '';
+            this.cursorTrailCanvas.style.display = '';
+            document.body.classList.remove('no-cursor-trail');
+        } else {
+            this.cursorDot.style.display = 'none';
+            this.cursorTrailCanvas.style.display = 'none';
+            document.body.classList.add('no-cursor-trail');
+        }
+    }
+
+    initSettings() {
+        const modal = document.getElementById('settings-modal');
+        const closeBtn = document.getElementById('close-settings-btn');
+        const toastsToggle = document.getElementById('settings-toasts');
+        const confettiToggle = document.getElementById('settings-confetti');
+        const cursorTrailToggle = document.getElementById('settings-cursor-trail');
+
+        toastsToggle.checked = this.settings.toasts;
+        confettiToggle.checked = this.settings.confetti;
+        cursorTrailToggle.checked = this.settings.cursorTrail;
+        this.applyCursorTrailSetting();
+
+        document.getElementById('profile-settings-btn').addEventListener('click', () => {
+            document.getElementById('profile-modal').classList.remove('open');
+            modal.classList.add('open');
+        });
+        closeBtn.addEventListener('click', () => modal.classList.remove('open'));
+        modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.remove('open'); });
+
+        toastsToggle.addEventListener('change', () => {
+            this.settings.toasts = toastsToggle.checked;
+            this.saveSettings();
+        });
+        confettiToggle.addEventListener('change', () => {
+            this.settings.confetti = confettiToggle.checked;
+            this.saveSettings();
+        });
+        cursorTrailToggle.addEventListener('change', () => {
+            this.settings.cursorTrail = cursorTrailToggle.checked;
+            this.saveSettings();
+            this.applyCursorTrailSetting();
+        });
     }
 
     // Misc Methods

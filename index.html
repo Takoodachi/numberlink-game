@@ -5,20 +5,23 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Number Link</title>
-    
-    <link rel="icon" href="favicon_light.svg" media="(prefers-color-scheme: dark)">
-    <link rel="icon" href="favicon_dark.svg" media="(prefers-color-scheme: light)">
+
+    <link id="dynamic-favicon" rel="icon" href="favicon_dark.svg">
 
     <!-- Google tag (gtag.js) -->
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-X49179PN8J"></script>
     <script>
         window.dataLayer = window.dataLayer || [];
-        function gtag(){dataLayer.push(arguments);}
+        function gtag() { dataLayer.push(arguments); }
         gtag('js', new Date());
 
         gtag('config', 'G-X49179PN8J');
     </script>
-    
+    <!-- Google Fonts: Outfit -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
+
     <link rel="stylesheet" href="style.css">
 </head>
 
@@ -44,42 +47,44 @@
 
     <div id="gamemode-sidebar">
         <h3 style="margin: 0 0 5px 0; color: var(--text-color); font-size: 1.2rem; text-align: center;">Game Modes</h3>
-        
+
         <button class="game-btn btn-primary gamemode-btn">Number Link</button>
         <button class="game-btn btn-secondary gamemode-btn">Speedrun</button>
         <button class="game-btn btn-secondary gamemode-btn">Blindfold</button>
         <button class="game-btn btn-secondary gamemode-btn">Optimal Path</button>
         <button class="game-btn btn-secondary gamemode-btn">Connecting Letters</button>
-        
+
         <hr style="width: 100%; border: 1px solid var(--btn-bg); margin: 5px 0;">
-        
+
         <button id="sidebar-auth-trigger" class="game-btn btn-secondary">Profile / Settings</button>
     </div>
 
     <div id="word-def-sidebar">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
             <h3 style="margin: 0; color: var(--text-color); font-size: 1.2rem;">Dictionary</h3>
-            <button id="close-word-def-btn" style="background: none; border: none; font-size: 1.2rem; cursor: pointer; color: var(--text-color);">✖</button>
+            <button id="close-word-def-btn"
+                style="background: none; border: none; font-size: 1.2rem; cursor: pointer; color: var(--text-color);">✖</button>
         </div>
         <hr style="width: 100%; border: 1px solid var(--btn-bg); margin: 5px 0;">
-        <div id="word-def-content" style="color: var(--text-color); font-size: 1rem; line-height: 1.4; overflow-y: auto; max-height: 60vh;">
-            </div>
+        <div id="word-def-content"
+            style="color: var(--text-color); font-size: 1rem; line-height: 1.4; overflow-y: auto; max-height: 60vh;">
+        </div>
     </div>
 
     <button id="leaderboard-toggle-btn" class="game-btn btn-secondary leaderboard-top-left"></button>
 
     <div id="leaderboard-panel">
         <h3 style="margin: 0 0 5px 0; color: var(--text-color); font-size: 1.2rem; text-align: center;">Leaderboard</h3>
-        
+
         <div class="leaderboard-tabs">
             <button id="tab-streak" class="tab-btn active">Highest Streak</button>
             <button id="tab-time" class="tab-btn">Fastest Time</button>
         </div>
-        
+
         <hr style="width: 100%; border: 1px solid var(--btn-bg); margin: 5px 0;">
-        
+
         <div id="leaderboard-content" class="leaderboard-list">
-            </div>
+        </div>
     </div>
 
     <div id="rules-modal" class="modal-overlay">
@@ -98,14 +103,14 @@
                 <h2>Select Level</h2>
                 <button id="close-level-btn">✖</button>
             </div>
-            
+
             <div class="search-container">
                 <input type="number" id="level-search" class="level-search-input" placeholder="Search level..." min="1">
                 <button id="level-search-btn" class="level-search-btn" title="Search">➔</button>
             </div>
 
             <div id="level-grid">
-                </div>
+            </div>
         </div>
     </div>
 
@@ -120,7 +125,7 @@
                 <input type="password" id="auth-password" class="auth-input" placeholder="Password">
                 <button id="auth-submit-btn" class="game-btn btn-primary">Login</button>
                 <p id="auth-error" class="auth-error-msg"></p>
-                
+
                 <p id="auth-toggle-text" class="auth-toggle">Don't have an account? <span>Register</span></p>
             </div>
         </div>
@@ -138,11 +143,11 @@
                     <button id="profile-change-email" class="game-btn btn-secondary profile-small-btn">Change</button>
                 </p>
                 <p class="profile-stat">
-                    <strong>Password:</strong> <br>•••••••• 
+                    <strong>Password:</strong> <br>••••••••
                     <button id="profile-reset-pwd" class="game-btn btn-secondary profile-small-btn">Reset</button>
                 </p>
                 <p class="profile-stat"><strong>Current Level:</strong> <span id="profile-level"></span></p>
-                
+
                 <button id="profile-logout-btn" class="game-btn btn-primary logout-btn-red">Logout</button>
             </div>
         </div>
@@ -156,7 +161,7 @@
             </div>
             <div class="auth-form">
                 <input type="email" id="new-email-input" class="auth-input" placeholder="New Email Address">
-                
+
                 <label class="checkbox-container">
                     <input type="checkbox" id="confirm-email-checkbox">
                     <span>Are you sure you want to change your email?</span>
@@ -194,7 +199,8 @@
                 <button id="close-promo-btn">✖</button>
             </div>
             <div class="conflict-body">
-                <p>Create an account to save your level progress, pick up right where you left off, and improve your streak across all your devices!</p>
+                <p>Create an account to save your level progress, pick up right where you left off, and improve your
+                    streak across all your devices!</p>
             </div>
             <div class="conflict-options">
                 <button id="btn-promo-login" class="conflict-btn cloud-btn">
@@ -211,7 +217,7 @@
         <div class="title-row">
             <h1 id="main-game-title">Number Link</h1>
         </div>
-            
+
         <button id="level-select-btn" class="level-indicator">Level 1 ▾</button>
 
         <div id="stats">
@@ -225,8 +231,6 @@
         <button id="rules-btn" title="Rules">i</button>
         <canvas id="gameCanvas"></canvas>
     </div>
-
-    <div id="message-area"></div>
 
     <div id="toast-container"></div>
 

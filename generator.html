@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Level Generator</title>
+    <style>
+        body { font-family: sans-serif; padding: 50px; text-align: center; background: #f0f2f5; }
+        button { padding: 15px 30px; font-size: 20px; cursor: pointer; background: #4f46e5; color: white; border: none; border-radius: 8px; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        #status { margin-top: 20px; font-weight: bold; color: #333; }
+        progress { width: 100%; max-width: 500px; height: 30px; margin-top: 20px; display: none; }
+    </style>
+</head>
+<body>
+    <h1>Game Level Generator</h1>
+    <p>Generating 1100 unique levels: 500 (5x5), 500 (6x6), 50 (7x7), and 50 (8x8).</p>
+    <button id="genBtn" onclick="startGeneration()">Start Generation</button>
+    <br>
+    <progress id="progressBar" value="0" max="1100"></progress>
+    <div id="status">Ready</div>
+
+<script>
+    // Configuration updated to match new requirements
+    const CONFIG = [
+        { size: 5, count: 500 },
+        { size: 6, count: 500 },
+        { size: 7, count: 50 },
+        { size: 8, count: 50 }
+    ];
+
+    const uniquePaths = new Set();
+    let levels = [];
+
+    async function startGeneration() {
+        const btn = document.getElementById('genBtn');
+        const status = document.getElementById('status');
+        const bar = document.getElementById('progressBar');
+        
+        btn.disabled = true;
+        bar.style.display = 'inline-block';
+        bar.max = CONFIG.reduce((a, b) => a + b.count, 0);
+        
+        let totalGenerated = 0;
+
+        // Use setTimeout to allow UI updates so browser doesn't freeze
+        for (let cfg of CONFIG) {
+            status.innerText = `Generating ${cfg.size}x${cfg.size} levels...`;
+            
+            for (let i = 0; i < cfg.count; i++) {
+                // Yield to main thread every few levels to keep UI responsive
+                if(i % 5 === 0) await new Promise(r => setTimeout(r, 0));
+                
+                let levelData = generateUniqueLevel(cfg.size);
+                levels.push(levelData);
+                
+                totalGenerated++;
+                bar.value = totalGenerated;
+            }
+        }
+
+        status.innerText = "Shuffling levels...";
+        await new Promise(r => setTimeout(r, 100)); // UI Breath
+        
+        // Fisher-Yates Shuffle
+        for (let i = levels.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [levels[i], levels[j]] = [levels[j], levels[i]];
+        }
+
+        // Add IDs after shuffling so Level 1 is always index 0
+        levels = levels.map((lvl, index) => ({
+            id: index + 1,
+            ...lvl
+        }));
+
+        downloadJSON(levels);
+        status.innerText = "Done! levels.json downloaded.";
+        btn.disabled = false;
+    }
+
+    function generateUniqueLevel(size) {
+        let path, pathString;
+        let attempts = 0;
+        
+        // Loop until we find a path we haven't seen before
+        do {
+            path = generateHamiltonianPath(size);
+            pathString = JSON.stringify(path);
+            attempts++;
+            // Failsafe for infinite loops
+            if(attempts > 2000) break; 
+        } while(uniquePaths.has(pathString));
+
+        uniquePaths.add(pathString);
+
+        // Generate Clues (The fixed numbers)
+        const clues = generateCluesFromPath(path, size);
+
+        return {
+            size: size,
+            clues: clues,
+            solution: path // We store solution for hints
+        };
+    }
+
+    function generateHamiltonianPath(N) {
+        const path = [];
+        const visited = new Set();
+        let iterations = 0;
+        // Safety limit: if it takes too many moves, restart to avoid freezing on 8x8 grids
+        const maxIterations = 50000; 
+        
+        const solve = (r, c) => {
+            iterations++;
+            if (iterations > maxIterations) return false;
+
+            path.push({r, c});
+            visited.add(`${r},${c}`);
+
+            if (path.length === N * N) return true;
+
+            // Get random neighbors
+            const dirs = [[0,1], [1,0], [0,-1], [-1,0]]
+                .sort(() => Math.random() - 0.5);
+
+            for (let [dr, dc] of dirs) {
+                const nr = r + dr, nc = c + dc;
+                if (nr >= 0 && nr < N && nc >= 0 && nc < N && !visited.has(`${nr},${nc}`)) {
+                    if (solve(nr, nc)) return true;
+                }
+            }
+
+            // Backtrack
+            visited.delete(`${r},${c}`);
+            path.pop();
+            return false;
+        };
+
+        // Retry wrapper: If DFS gets stuck in a dead end, we just restart entirely.
+        while(true) {
+            iterations = 0;
+            path.length = 0;
+            visited.clear();
+            const startR = Math.floor(Math.random() * N);
+            const startC = Math.floor(Math.random() * N);
+            if(solve(startR, startC)) return path;
+        }
+    }
+
+    function generateCluesFromPath(path, size) {
+        const clues = [];
+        let pathIndex = 0;
+        let counter = 1;
+
+        // Always place 1 at the start
+        clues.push({ r: path[0].r, c: path[0].c, val: 1 });
+
+        while (pathIndex < path.length - 1) {
+            // Determine distance to next number (segment length)
+            // 3 to 6 steps usually creates a good flow without being too obvious
+            let distance = Math.floor(Math.random() * 4) + 3; 
+
+            let nextIndex = pathIndex + distance;
+
+            // Cap at the end
+            if (nextIndex >= path.length - 1) {
+                nextIndex = path.length - 1;
+            }
+
+            // Move to next anchor
+            pathIndex = nextIndex;
+            counter++;
+
+            const p = path[pathIndex];
+            clues.push({ r: p.r, c: p.c, val: counter });
+            
+            // If we reached the end of the path, stop
+            if (pathIndex === path.length - 1) break;
+        }
+
+        return clues;
+    }
+
+    function downloadJSON(data) {
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(data));
+        const downloadAnchorNode = document.createElement('a');
+        downloadAnchorNode.setAttribute("href", dataStr);
+        downloadAnchorNode.setAttribute("download", "levels.json");
+        document.body.appendChild(downloadAnchorNode);
+        downloadAnchorNode.click();
+        downloadAnchorNode.remove();
+    }
+</script>
+</body>
+</html>

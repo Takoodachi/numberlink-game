@@ -1,6 +1,6 @@
 # 🔗 Number Link - Logic & Vocabulary Puzzle Game
 
-A modern, responsive HTML5 and Native Android implementation of the classic Number Link / Flow logic puzzle—now expanded with multiple unique game modes, including Speedruns, Blindfold challenges, and a Dictionary-powered Vocabulary mode!
+A high-fidelity, responsive HTML5 and Native Android implementation of the classic Number Link / Flow logic puzzle—now expanded with a premium visual design and multiple unique game modes, including Speedruns, Blindfold challenges, and a Dictionary-powered Vocabulary mode!
 
 ## 🎮 Game Modes
 
@@ -11,6 +11,12 @@ A modern, responsive HTML5 and Native Android implementation of the classic Numb
 * **Blindfold:** A true memory and logic test. Numbers are hidden and are only revealed as you successfully connect them in the correct order.
 
 ## ✨ Features
+
+### Premium UI & Aesthetics
+* **High-Fidelity Landing Page:** A modernized entry experience featuring a dynamic "snake-like" interactive background where colored grid boxes follow the cursor in a chain.
+* **3D Perspective Carousel:** An immersive 3D carousel for selecting game modes, complete with click-to-select side cards, intuitive visual indicators, and seamless transitions into the game.
+* **Modern Design Language:** Utilizes the "Outfit" typography, sleek glassmorphism effects for modals and sidebars, smooth dynamic gradients, and polished micro-animations for buttons and interactive elements.
+* **Themes:** Built-in Dark Mode 🌙 and Light Mode ☀️ toggled via a professional Floating Action Button (FAB), complete with custom-themed scrollbars and dynamic favicons.
 
 ### Gameplay & Mechanics
 * **Dynamic Grid System:** Loads levels dynamically from obfuscated `.enc` files (`levels.enc` and `word_levels.enc`), utilizing Base64 encoding to prevent players from easily looking up solutions via browser developer tools.
@@ -31,19 +37,16 @@ A modern, responsive HTML5 and Native Android implementation of the classic Numb
 * **Player Profile:** Dedicated dashboard displaying player stats, current level, and account management options (like changing email addresses securely).
 * **Developer Mode:** Logging in with a designated admin email automatically unlocks all levels, prints valid words to the console, grants infinite hints, and bypasses "Show Answer" restrictions.
 
-### UI & UX
-* **Themes:** Built-in Dark Mode 🌙 and Light Mode ☀️ toggle with custom-themed scrollbars and dynamic favicons. UI colors adapt dynamically, utilizing clear accents for optimal visibility.
-* **Responsive Design:** Resizing canvas that adapts to any screen size, centered via dynamic viewport height (`dvh`).
+### UX Enhancements
+* **Responsive Layout:** Resizing canvas that adapts to any screen size, centered via dynamic viewport height (`dvh`).
 * **Mobile Optimized:**
     * Touch event support with `touch-action: none` to prevent native browser bouncing and scrolling.
     * **Portrait Mode Lock:** Forces mobile users to rotate their device for the best experience.
-    * Proportional CSS grid layout for UI controls to prevent crowding on small screens.
 * **Leaderboards & Tracking:** A slide-out leaderboard panel to track Daily Streaks and Speedrun times.
-* **Dynamic Toast Notifications:** A custom flexbox container dynamically stacks multiple alerts (like streak increases, new best times, or hint resets) without overlapping.
+* **Dynamic Toast Notifications:** A custom flexbox container dynamically stacks multiple alerts without overlapping.
 * **Visual Polish:**
-    * Premium, unified "Level Complete" card UI that scales cleanly across all modes.
+    * Premium "Level Complete" card UI that scales cleanly across all modes.
     * Confetti celebration on level completion 🎉.
-    * Smooth CSS transitions for UI elements, sidebars, and modals.
 * **Review Mode:** "Show Answer" button appears for previously completed levels, dynamically drawing the solution or revealing the dictionary definition depending on the mode.
 
 ## 📱 Mobile App Version (Android)

@@ -43,8 +43,6 @@
 
     <button id="theme-toggle" title="Toggle Dark Mode">🌙</button>
 
-    <button id="auth-btn" class="game-btn btn-secondary auth-top-right"></button>
-
     <div id="carousel-overlay" class="carousel-overlay">
         <div class="carousel-container">
             <div class="carousel-board" data-mode="classic">
@@ -106,20 +104,16 @@
         </div>
     </div>
 
-    <button id="leaderboard-toggle-btn" class="game-btn btn-secondary leaderboard-top-left"></button>
-
-    <div id="leaderboard-panel">
-        <h3 style="margin: 0 0 5px 0; color: var(--text-color); font-size: 1.2rem; text-align: center;">Leaderboard</h3>
-
-        <div class="leaderboard-tabs">
-            <button id="tab-streak" class="tab-btn active">Highest Streak</button>
-            <button id="tab-time" class="tab-btn">Fastest Time</button>
+    <div id="level-panel">
+        <div class="level-panel-header">
+            <h3>Levels</h3>
+            <button id="close-level-panel-btn">✖</button>
         </div>
-
-        <hr style="width: 100%; border: 1px solid var(--btn-bg); margin: 5px 0;">
-
-        <div id="leaderboard-content" class="leaderboard-list">
+        <div class="search-container level-panel-search">
+            <input type="number" id="level-panel-search-input" class="level-search-input" placeholder="Jump to level..." min="1">
+            <button id="level-panel-search-btn" class="game-btn btn-primary level-search-btn" title="Search">➔</button>
         </div>
+        <div id="level-panel-grid"></div>
     </div>
 
     <div id="rules-modal" class="modal-overlay">
@@ -290,32 +284,113 @@
         </div>
     </div>
 
-    <header>
-        <div class="title-row" style="cursor: none;" title="Back to Game Modes">
-            <h1 id="main-game-title">Number Link</h1>
-        </div>
+    <button id="auth-btn" class="game-btn btn-secondary auth-global"></button>
 
-        <button id="level-select-btn" class="level-indicator">Level 1 ▾</button>
+    <div id="landing-page">
 
-        <div id="stats">
-            <span id="best-time-display" style="display: none;">Best time: 00:00.00</span>
-            <span id="streak-display" style="display: none; color: #f97316;">🔥 0</span>
-            <span id="hints-display">Hints: 2</span>
-        </div>
-    </header>
+        <section id="hero-section">
+            <div class="hero-bg-grid"></div>
+            <canvas id="hero-canvas"></canvas>
+            <div class="hero-content">
+                <h1 class="hero-title">NUMBER<br>LINK</h1>
+                <p class="hero-tagline">Five modes. One board. Infinite challenge.</p>
+                <div class="hero-ctas">
+                    <button class="hero-play-btn" id="hero-play-btn">Play Now</button>
+                    <button class="hero-scroll-btn" id="hero-scroll-btn">See Modes ↓</button>
+                </div>
+            </div>
+        </section>
 
-    <div id="game-wrapper">
-        <button id="rules-btn" title="Rules">i</button>
-        <canvas id="gameCanvas"></canvas>
+        <section id="modes-section" class="section-alt">
+            <div class="modes-inner">
+                <h2 class="section-heading">Choose Your Challenge</h2>
+                <div class="modes-grid">
+                    <div class="mode-card" data-mode="classic">
+                        <span class="mode-card-icon">🔢</span>
+                        <h3 class="mode-card-name">Classic</h3>
+                        <p class="mode-card-desc">Connect 1→2→3… to fill every tile on the grid.</p>
+                        <button class="mode-card-play-btn">Play</button>
+                    </div>
+                    <div class="mode-card" data-mode="speedrun">
+                        <span class="mode-card-icon">⚡</span>
+                        <h3 class="mode-card-name">Speedrun</h3>
+                        <p class="mode-card-desc">Race the clock. Chase the leaderboard.</p>
+                        <button class="mode-card-play-btn">Play</button>
+                    </div>
+                    <div class="mode-card" data-mode="blindfold">
+                        <span class="mode-card-icon">🙈</span>
+                        <h3 class="mode-card-name">Blindfold</h3>
+                        <p class="mode-card-desc">Numbers are hidden. Trust your memory.</p>
+                        <button class="mode-card-play-btn">Play</button>
+                    </div>
+                    <div class="mode-card" data-mode="optimal">
+                        <span class="mode-card-icon">📐</span>
+                        <h3 class="mode-card-name">Optimal Path</h3>
+                        <p class="mode-card-desc">Solve it. Then solve it in fewer tiles.</p>
+                        <button class="mode-card-play-btn">Play</button>
+                    </div>
+                    <div class="mode-card" data-mode="words">
+                        <span class="mode-card-icon">🔤</span>
+                        <h3 class="mode-card-name">Connecting Letters</h3>
+                        <p class="mode-card-desc">Spell words by linking letters across the grid.</p>
+                        <button class="mode-card-play-btn">Play</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="howtoplay-section">
+            <h2 class="section-heading">How It Works</h2>
+            <div class="steps-row">
+                <div class="step-card">
+                    <span class="step-number">01</span>
+                    <h3 class="step-title">Pick a Mode</h3>
+                    <p class="step-desc">Five distinct challenges, from speed runs to memory tests. Start with Classic.</p>
+                </div>
+                <div class="step-card">
+                    <span class="step-number">02</span>
+                    <h3 class="step-title">Draw Connections</h3>
+                    <p class="step-desc">Drag across the board to link numbers in order. Paths can't cross.</p>
+                </div>
+                <div class="step-card">
+                    <span class="step-number">03</span>
+                    <h3 class="step-title">Fill the Grid</h3>
+                    <p class="step-desc">Every tile must be covered. Solve the puzzle and the board lights up.</p>
+                </div>
+            </div>
+            <div class="howtoplay-cta">
+                <button id="howtoplay-play-btn" class="hero-play-btn">Start Playing</button>
+            </div>
+        </section>
     </div>
 
-    <div id="toast-container"></div>
+    <div id="game-section">
+        <button id="level-panel-btn" class="game-btn btn-secondary leaderboard-top-left" title="Browse Levels">☰ Levels</button>
+        <header>
+            <div class="title-row" style="cursor: none;" title="Back to Game Modes">
+                <h1 id="main-game-title">Number Link</h1>
+            </div>
 
-    <div id="ui-controls">
-        <button class="game-btn btn-secondary" id="btn-undo">Undo</button>
-        <button class="game-btn btn-primary" id="btn-hint">Hint</button>
-        <button class="game-btn btn-secondary" id="btn-show-answer" style="display: none;">Show Answer</button>
-        <button class="game-btn btn-secondary" id="btn-reset">Reset</button>
+            <div id="stats">
+                <span id="best-time-display" style="display: none;">Best time: 00:00.00</span>
+                <span id="streak-display" style="display: none; color: #f97316;">🔥 0</span>
+                <span id="hints-display">Hints: 2</span>
+            </div>
+        </header>
+
+        <div id="game-wrapper">
+            <button id="rules-btn" title="Rules">i</button>
+            <canvas id="gameCanvas"></canvas>
+        </div>
+
+        <div id="toast-container"></div>
+
+        <div id="ui-controls">
+            <button class="game-btn btn-secondary" id="btn-undo">Undo</button>
+            <button class="game-btn btn-primary" id="btn-hint">Hint</button>
+            <button class="game-btn btn-secondary" id="btn-show-answer" style="display: none;">Show Answer</button>
+            <button class="game-btn btn-secondary" id="btn-reset">Reset</button>
+        </div>
     </div>
 
     <div id="orientation-lock">
@@ -324,8 +399,12 @@
     </div>
 
     <div id="contact-corner" class="contact-corner"></div>
-    <script type="module" src="script.js"></script>
     <canvas id="confetti-canvas"></canvas>
+    <script type="module" src="script.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollToPlugin.min.js"></script>
+    <script src="landing.js"></script>
 </body>
 
 </html>

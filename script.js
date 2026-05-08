@@ -34,6 +34,9 @@ class Game {
 
         if (this.isMobile) {
             document.body.classList.add('mobile-layout');
+            document.documentElement.classList.add('mobile-layout');
+        } else {
+            document.getElementById('carousel-overlay').classList.add('hidden');
         }
 
         this.splashStartTime = Date.now();
@@ -91,7 +94,7 @@ class Game {
         this.initCursorEffect();
         this.initSettings();
 
-        this.initLeaderboard();
+        this.initLevelPanel();
         this.initRulesModal();
         this.bindInputs();
         this.initTheme();
@@ -154,23 +157,17 @@ class Game {
             if (e.target.id === 'change-email-modal') e.target.classList.remove('open');
         });
 
-        document.getElementById('level-select-btn').onclick = () => this.openLevelModal();
-        document.getElementById('level-search-btn').addEventListener('click', () => this.executeSearch());
-        document.getElementById('level-search').addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') this.executeSearch();
+        document.getElementById('level-panel-btn').onclick = () => this.openLevelPanel();
+        document.getElementById('level-panel-search-btn').addEventListener('click', () => this.executePanelSearch());
+        document.getElementById('level-panel-search-input').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') this.executePanelSearch();
         });
-        const levelGrid = document.getElementById('level-grid');
-        const searchContainer = document.querySelector('.search-container');
-        levelGrid.addEventListener('scroll', () => {
-            if (!searchContainer) return;
-            const currentScrollTop = levelGrid.scrollTop;
-            if (currentScrollTop > this.lastScrollTop && currentScrollTop > 10) {
-                searchContainer.classList.add('hidden');
-            } else if (currentScrollTop < this.lastScrollTop) {
-                searchContainer.classList.remove('hidden');
-            }
+        const levelPanelGrid = document.getElementById('level-panel-grid');
+        levelPanelGrid.addEventListener('scroll', () => {
+            const currentScrollTop = levelPanelGrid.scrollTop;
             this.lastScrollTop = currentScrollTop <= 0 ? 0 : currentScrollTop;
         });
+        document.getElementById('close-level-panel-btn').onclick = () => this.closeLevelPanel();
         document.getElementById('close-level-btn').onclick = () => this.closeLevelModal();
         document.getElementById('level-modal').addEventListener('click', (e) => {
             if (e.target.id === 'level-modal') this.closeLevelModal();
@@ -682,21 +679,16 @@ class Game {
     executeSearch() {
         const searchInput = document.getElementById('level-search');
         if (!searchInput) return;
-
         const searchTerm = searchInput.value.trim();
         const grid = document.getElementById('level-grid');
-        const buttons = grid.getElementsByClassName('lvl-btn');
-
-        for (let btn of buttons) {
-            if (searchTerm === "" || btn.innerText.includes(searchTerm)) {
-                btn.style.display = '';
-            } else {
-                btn.style.display = 'none';
-            }
+        if (!grid) return;
+        for (let btn of grid.getElementsByClassName('lvl-btn')) {
+            btn.style.display = (searchTerm === '' || btn.innerText.includes(searchTerm)) ? '' : 'none';
         }
     }
 
     openLevelModal() {
+        // Kept for mobile compatibility — on mobile still uses center modal
         const modal = document.getElementById('level-modal');
         const grid = document.getElementById('level-grid');
         const searchInput = document.getElementById('level-search');
@@ -713,33 +705,72 @@ class Game {
 
         grid.scrollTop = 0;
         this.lastScrollTop = 0;
-
         grid.innerHTML = '';
         if (searchInput) searchInput.value = '';
 
+        this.fillLevelGridInto(grid);
+        modal.classList.add('open');
+    }
+
+    openLevelPanel() {
+        const panel = document.getElementById('level-panel');
+        const backdrop = document.getElementById('level-panel-backdrop');
+        const grid = document.getElementById('level-panel-grid');
+        const searchInput = document.getElementById('level-panel-search-input');
+        const panelSearch = document.querySelector('.level-panel-search');
+
+        if (panelSearch) {
+            panelSearch.style.display = this.currentMode === 'words' ? 'none' : 'flex';
+        }
+
+        grid.scrollTop = 0;
+        this.lastScrollTop = 0;
+        grid.innerHTML = '';
+        if (searchInput) searchInput.value = '';
+
+        this.fillLevelGridInto(grid);
+        panel.classList.add('open');
+        if (backdrop) backdrop.classList.add('open');
+    }
+
+    fillLevelGridInto(grid) {
         const activeLevels = this.currentMode === 'words' ? this.wordLevels : this.allLevels;
         const activeMaxUnlocked = this.currentMode === 'words' ? this.maxUnlockedWordIndex : this.maxUnlockedIndex;
         const activeCurrentIndex = this.currentMode === 'words' ? this.currentWordLevelIndex : this.currentLevelIndex;
 
-        if (activeLevels.length === 0) {
+        if (!activeLevels || activeLevels.length === 0) {
             grid.innerHTML = '<p style="color:var(--text-color); padding:20px;">Levels loading...</p>';
-        } else {
-            const limit = this.isDevMode ? activeLevels.length : activeMaxUnlocked;
-
-            for (let i = 0; i <= limit && i < activeLevels.length; i++) {
-                const lvl = activeLevels[i];
-                const btn = document.createElement('button');
-                btn.innerText = lvl.id || (i + 1);
-                btn.className = 'lvl-btn';
-
-                if (i === activeCurrentIndex) btn.classList.add('active');
-
-                btn.onclick = () => this.loadLevel(i);
-                grid.appendChild(btn);
-            }
+            return;
         }
 
-        modal.classList.add('open');
+        const limit = this.isDevMode ? activeLevels.length : activeMaxUnlocked;
+
+        for (let i = 0; i <= limit && i < activeLevels.length; i++) {
+            const lvl = activeLevels[i];
+            const btn = document.createElement('button');
+            btn.innerText = lvl.id || (i + 1);
+            btn.className = 'lvl-btn';
+            if (i === activeCurrentIndex) btn.classList.add('active');
+            btn.onclick = () => {
+                this.loadLevel(i);
+                this.closeLevelPanel();
+            };
+            grid.appendChild(btn);
+        }
+    }
+
+    executePanelSearch() {
+        const input = document.getElementById('level-panel-search-input');
+        if (!input) return;
+        const target = parseInt(input.value, 10);
+        if (isNaN(target) || target < 1) return;
+
+        const activeLevels = this.currentMode === 'words' ? this.wordLevels : this.allLevels;
+        const idx = activeLevels.findIndex(l => (l.id || 0) === target);
+        if (idx !== -1) {
+            this.loadLevel(idx);
+            this.closeLevelPanel();
+        }
     }
 
     async fetchLevels() {
@@ -842,7 +873,8 @@ class Game {
             this.currentWordString = "";
             this.resizeCanvas();
             this.updateUI();
-            this.closeLevelModal();
+            this.boardEntranceAnimation();
+            this.closeLevelPanel(); this.closeLevelModal();
             return;
         }
 
@@ -873,81 +905,89 @@ class Game {
 
         this.maxNumber = maxVal;
         this.updateUI();
+        this.boardEntranceAnimation();
+        this.closeLevelPanel(); this.closeLevelModal();
+    }
+
+    boardEntranceAnimation() {
+        let animCells;
+        let staggerMs;
+        if (this.currentMode === 'words') {
+            animCells = [];
+            for (let r = 0; r < this.gridSize; r++) {
+                for (let c = 0; c < this.gridSize; c++) {
+                    if (this.grid[r][c].letter) animCells.push({ r, c });
+                }
+            }
+            staggerMs = 20;
+        } else {
+            animCells = [];
+            for (let r = 0; r < this.gridSize; r++) {
+                for (let c = 0; c < this.gridSize; c++) {
+                    if (this.grid[r][c].type === 'fixed') {
+                        animCells.push({ r, c, val: this.grid[r][c].val });
+                    }
+                }
+            }
+            animCells.sort((a, b) => a.val - b.val);
+            staggerMs = 80;
+        }
+
+        animCells.forEach(({ r, c }) => {
+            this.grid[r][c].animAlpha = 0;
+            this.grid[r][c].animScale = 0.5;
+        });
+
         this.draw();
-        this.closeLevelModal();
+
+        const animDuration = 200;
+        const startTime = performance.now();
+
+        const animate = (now) => {
+            let anyActive = false;
+            animCells.forEach(({ r, c }, i) => {
+                const elapsed = now - (startTime + i * staggerMs);
+                if (elapsed < 0) { anyActive = true; return; }
+                const p = Math.min(elapsed / animDuration, 1);
+                const ease = 1 - Math.pow(1 - p, 3);
+                this.grid[r][c].animAlpha = ease;
+                this.grid[r][c].animScale = 0.5 + 0.5 * ease;
+                if (p < 1) anyActive = true;
+            });
+            this.draw();
+            if (anyActive) {
+                requestAnimationFrame(animate);
+            } else {
+                animCells.forEach(({ r, c }) => {
+                    delete this.grid[r][c].animAlpha;
+                    delete this.grid[r][c].animScale;
+                });
+                this.draw();
+            }
+        };
+        requestAnimationFrame(animate);
     }
 
     closeLevelModal() { document.getElementById('level-modal').classList.remove('open'); }
 
-    // Leaderboards and Rules Methods
-    initLeaderboard() {
-        const lbBtn = document.getElementById('leaderboard-toggle-btn');
-        const panel = document.getElementById('leaderboard-panel');
-        const tabStreak = document.getElementById('tab-streak');
-        const tabTime = document.getElementById('tab-time');
-
-        lbBtn.innerText = this.isMobile ? "🏆" : "Leaderboard";
-
-        lbBtn.onclick = (e) => {
-            e.stopPropagation();
-            panel.classList.toggle('open');
-            if (panel.classList.contains('open')) {
-                const activeType = tabTime.classList.contains('active') ? 'time' : 'streak';
-                this.renderLeaderboard(activeType);
-            }
-        };
-
-        document.addEventListener('click', (e) => {
-            if (panel.classList.contains('open') && !panel.contains(e.target) && !lbBtn.contains(e.target)) {
-                panel.classList.remove('open');
-            }
-        });
-
-        tabStreak.onclick = () => {
-            tabStreak.classList.add('active');
-            tabTime.classList.remove('active');
-            this.renderLeaderboard('streak');
-        };
-
-        tabTime.onclick = () => {
-            tabTime.classList.add('active');
-            tabStreak.classList.remove('active');
-            this.renderLeaderboard('time');
-        };
+    closeLevelPanel() {
+        const panel = document.getElementById('level-panel');
+        const backdrop = document.getElementById('level-panel-backdrop');
+        if (panel) panel.classList.remove('open');
+        if (backdrop) backdrop.classList.remove('open');
     }
 
-    renderLeaderboard(type) {
-        const content = document.getElementById('leaderboard-content');
-        content.innerHTML = '<div style="text-align: center; padding: 20px;">Loading...</div>';
+    initLevelPanel() {
+        const btn = document.getElementById('level-panel-btn');
+        if (btn) btn.innerText = this.isMobile ? '☰' : '☰ Levels';
 
-        setTimeout(() => {
-            content.innerHTML = '';
-            if (type === 'streak') {
-                const mockStreaks = [100, 97, 85, 60, 42, 30, 25, 12, 5, 2];
-                mockStreaks.forEach((streak, idx) => {
-                    content.innerHTML += `
-                        <div class="leaderboard-item">
-                            <span>#${idx + 1}</span> 
-                            <span>${streak} 🔥</span>
-                        </div>`;
-                });
-            } else {
-                const mockTimes = [
-                    { time: 4200, level: 10 },
-                    { time: 5100, level: 1 },
-                    { time: 6500, level: 5 },
-                    { time: 7200, level: 12 },
-                    { time: 8000, level: 2 }
-                ];
-                mockTimes.forEach((data, idx) => {
-                    content.innerHTML += `
-                        <div class="leaderboard-item">
-                            <span>#${idx + 1}</span> 
-                            <span>${this.formatTime(data.time)} - Level ${data.level}</span>
-                        </div>`;
-                });
-            }
-        }, 300);
+        // Inject backdrop element once
+        if (!document.getElementById('level-panel-backdrop')) {
+            const bd = document.createElement('div');
+            bd.id = 'level-panel-backdrop';
+            document.body.appendChild(bd);
+            bd.addEventListener('click', () => this.closeLevelPanel());
+        }
     }
 
     updateRulesUI() {
@@ -1090,7 +1130,7 @@ class Game {
         // Dismiss overlay by clicking the dark backdrop (only after first Play!)
         this.carouselOverlay.addEventListener('click', (e) => {
             if (e.target === this.carouselOverlay && this.carouselCanDismiss) {
-                this.carouselOverlay.classList.add('hidden');
+                this.dismissCarousel();
             }
         });
 
@@ -1100,7 +1140,7 @@ class Game {
                 if (e.key === 'ArrowRight') this.moveCarousel(1);
                 if (e.key === 'Enter') this.chooseCarouselMode(this.carouselIndex);
                 if (e.key === 'Escape' && this.carouselCanDismiss) {
-                    this.carouselOverlay.classList.add('hidden');
+                    this.dismissCarousel();
                 }
             }
         });
@@ -1117,6 +1157,10 @@ class Game {
         });
         this.carouselOverlay.classList.remove('hiding', 'hidden');
         this.updateCarouselTransforms();
+    }
+
+    dismissCarousel() {
+        this.carouselOverlay.classList.add('hidden');
     }
 
     generateMiniBoardHTML(mode) {
@@ -1663,13 +1707,18 @@ class Game {
 
     useHint() {
         if ((this.hints <= 0 && !this.isDevMode) || this.isWinning) {
-            if (!this.isWinning) alert("No hints remaining! Come back tomorrow.");
+            if (!this.isWinning) this.showToast("No hints remaining! Come back tomorrow.", 3000);
             return;
         }
 
         if (!this.isDevMode) {
             this.hints--;
             this.saveProgress();
+        }
+
+        if (this.currentMode === 'optimal') {
+            this.showOptimalHint();
+            return;
         }
 
         let currentMax = 1;
@@ -1700,6 +1749,63 @@ class Game {
 
         ctx.stroke(); ctx.restore();
         setTimeout(() => this.draw(), 2000);
+    }
+
+    showOptimalHint() {
+        let currentMax = 1;
+        while (currentMax < this.maxNumber) {
+            if (this.userLines.find(l => l.startVal === currentMax)) currentMax++;
+            else break;
+        }
+        if (currentMax >= this.maxNumber) return;
+
+        let startR, startC, endR, endC;
+        for (let r = 0; r < this.gridSize; r++) {
+            for (let c = 0; c < this.gridSize; c++) {
+                const cell = this.grid[r][c];
+                if (cell.type === 'fixed') {
+                    if (cell.val === currentMax)     { startR = r; startC = c; }
+                    if (cell.val === currentMax + 1) { endR = r;   endC = c;   }
+                }
+            }
+        }
+        if (startR === undefined || endR === undefined) return;
+
+        const path = this.findShortestPath(startR, startC, endR, endC);
+        if (!path) return;
+
+        const ctx = this.ctx;
+        ctx.save();
+        ctx.globalAlpha = 0.6;
+        ctx.strokeStyle = this.isDarkMode ? "#FFFF00" : "#FFD700";
+        ctx.lineWidth = this.cellSize * 0.4;
+        ctx.lineCap = "round"; ctx.lineJoin = "round";
+        ctx.beginPath();
+        const cx = c => c * this.cellSize + this.cellSize / 2;
+        const cy = r => r * this.cellSize + this.cellSize / 2;
+        ctx.moveTo(cx(path[0].c), cy(path[0].r));
+        for (let i = 1; i < path.length; i++) ctx.lineTo(cx(path[i].c), cy(path[i].r));
+        ctx.stroke();
+        ctx.restore();
+        setTimeout(() => this.draw(), 2000);
+    }
+
+    findShortestPath(startR, startC, endR, endC) {
+        const queue = [[startR, startC, [{ r: startR, c: startC }]]];
+        const visited = new Set([`${startR},${startC}`]);
+        while (queue.length) {
+            const [r, c, path] = queue.shift();
+            if (r === endR && c === endC) return path;
+            for (const [dr, dc] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+                const nr = r + dr, nc = c + dc;
+                const key = `${nr},${nc}`;
+                if (nr >= 0 && nr < this.gridSize && nc >= 0 && nc < this.gridSize && !visited.has(key)) {
+                    visited.add(key);
+                    queue.push([nr, nc, [...path, { r: nr, c: nc }]]);
+                }
+            }
+        }
+        return null;
     }
 
     checkDailyHint() {
@@ -1828,7 +1934,7 @@ class Game {
 
     updateUI() {
         if (this.allLevels && this.allLevels[this.currentLevelIndex]) {
-            document.getElementById('level-select-btn').innerText = `Level ${this.allLevels[this.currentLevelIndex].id} ▾`;
+            // level-select-btn removed; level shown in panel
         }
 
         const streakDisplay = document.getElementById('streak-display');
@@ -1887,7 +1993,7 @@ class Game {
                 }
             }
         } else if (this.currentMode === 'words') {
-            document.getElementById('level-select-btn').innerText = `Level ${this.currentWordLevelIndex + 1} ▾`;
+            // level-select-btn removed
             hintBtn.innerText = "Hint";
             hintBtn.disabled = true;
             hintBtn.style.opacity = '0.5';
@@ -2066,8 +2172,10 @@ class Game {
                 const cell = this.grid[r][c];
 
                 if (this.currentMode === 'words') {
+                    const alpha = cell.animAlpha !== undefined ? cell.animAlpha : 1;
+                    ctx.save();
+                    ctx.globalAlpha = alpha;
                     if (cell.type === 'fixed') {
-                        ctx.save();
                         ctx.shadowColor = this.isDarkMode ? "rgba(255,255,255,0.85)" : lineColor;
                         ctx.shadowBlur = cs * 0.2;
                         ctx.shadowOffsetY = 0;
@@ -2075,14 +2183,16 @@ class Game {
                         const scale = cell.animScale || 1.0;
                         ctx.arc(cx(c), cy(r), cs * 0.35 * scale, 0, Math.PI * 2);
                         ctx.fill();
-                        ctx.restore();
+                        ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
                     }
-
                     ctx.fillStyle = cell.type === 'fixed' ? nodeTextColor : (this.isDarkMode ? "#fff" : "#000");
                     ctx.fillText(cell.letter, cx(c), cy(r));
+                    ctx.restore();
 
                 } else if (cell.type === 'fixed') {
+                    const alpha = cell.animAlpha !== undefined ? cell.animAlpha : 1;
                     ctx.save();
+                    ctx.globalAlpha = alpha;
                     if (cell.val === 1 || cell.val === this.maxNumber) {
                         ctx.shadowColor = this.isDarkMode ? "rgba(255,255,255,0.85)" : lineColor;
                         ctx.shadowBlur = cs * 0.2;
@@ -2094,7 +2204,7 @@ class Game {
                     const scale = cell.animScale || 1.0;
                     ctx.arc(cx(c), cy(r), cs * 0.35 * scale, 0, Math.PI * 2);
                     ctx.fill();
-                    ctx.restore();
+                    ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
 
                     let showText = true;
                     if (this.currentMode === 'blindfold') {
@@ -2115,6 +2225,7 @@ class Game {
                         ctx.fillStyle = nodeTextColor;
                         ctx.fillText(cell.val, cx(c), cy(r));
                     }
+                    ctx.restore();
                 }
             }
         }
@@ -2408,4 +2519,4 @@ class Game {
     }
 }
 
-window.onload = () => { new Game(); };
+window.onload = () => { window.game = new Game(); };

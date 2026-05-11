@@ -401,6 +401,40 @@ body.mobile-layout #word-def-sidebar {
     top: 100px;
 }
 
+.word-def-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 5px;
+}
+
+#word-def-sidebar h3 {
+    margin: 0;
+    color: var(--text-color);
+    font-size: 1.2rem;
+}
+
+#close-word-def-btn {
+    background: none;
+    border: none;
+    font-size: 1.2rem;
+    color: var(--text-color);
+}
+
+#word-def-sidebar hr {
+    width: 100%;
+    border: 1px solid var(--btn-bg);
+    margin: 5px 0;
+}
+
+#word-def-content {
+    color: var(--text-color);
+    font-size: 1rem;
+    line-height: 1.4;
+    overflow-y: auto;
+    max-height: 60vh;
+}
+
 .word-win-card {
     font-size: 1rem;
     font-weight: normal;
@@ -731,6 +765,11 @@ h1 {
 .title-row:active h1 {
     transform: translateY(2px) scale(0.95);
 }
+
+/* Initially hidden UI elements — JS always sets an explicit display value to show them */
+#best-time-display { display: none; }
+#streak-display    { display: none; color: #f97316; }
+#btn-show-answer   { display: none; }
 
 /* Hints */
 #stats {

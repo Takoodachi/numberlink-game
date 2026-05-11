@@ -101,15 +101,12 @@
     </div>
 
     <div id="word-def-sidebar">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
-            <h3 style="margin: 0; color: var(--text-color); font-size: 1.2rem;">Dictionary</h3>
-            <button id="close-word-def-btn"
-                style="background: none; border: none; font-size: 1.2rem; cursor: pointer; color: var(--text-color);">✖</button>
+        <div class="word-def-header">
+            <h3>Dictionary</h3>
+            <button id="close-word-def-btn">✖</button>
         </div>
-        <hr style="width: 100%; border: 1px solid var(--btn-bg); margin: 5px 0;">
-        <div id="word-def-content"
-            style="color: var(--text-color); font-size: 1rem; line-height: 1.4; overflow-y: auto; max-height: 60vh;">
-        </div>
+        <hr>
+        <div id="word-def-content"></div>
     </div>
 
     <div id="level-panel">
@@ -381,13 +378,13 @@
     <div id="game-section">
         <button id="level-panel-btn" class="game-btn btn-secondary leaderboard-top-left" title="Browse Levels">☰ Levels</button>
         <header>
-            <div class="title-row" style="cursor: none;" title="Back to Game Modes">
+            <div class="title-row" title="Back to Game Modes">
                 <h1 id="main-game-title">Number Link</h1>
             </div>
 
             <div id="stats">
-                <span id="best-time-display" style="display: none;">Best time: 00:00.00</span>
-                <span id="streak-display" style="display: none; color: #f97316;">🔥 0</span>
+                <span id="best-time-display">Best time: 00:00.00</span>
+                <span id="streak-display">🔥 0</span>
                 <span id="hints-display">Hints: 2</span>
             </div>
         </header>
@@ -402,7 +399,7 @@
         <div id="ui-controls">
             <button class="game-btn btn-secondary" id="btn-undo">Undo</button>
             <button class="game-btn btn-primary" id="btn-hint">Hint</button>
-            <button class="game-btn btn-secondary" id="btn-show-answer" style="display: none;">Show Answer</button>
+            <button class="game-btn btn-secondary" id="btn-show-answer">Show Answer</button>
             <button class="game-btn btn-secondary" id="btn-reset">Reset</button>
         </div>
     </div>

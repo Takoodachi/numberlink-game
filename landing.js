@@ -205,7 +205,7 @@
         obs.observe(hero);
     }
 
-    // ── Split heading text into animatable characters ────────────────────────
+    // Split heading text into animatable characters
     function splitHeading(el) {
         var original = el.textContent;
         el.setAttribute('aria-label', original);
@@ -216,7 +216,7 @@
         return el.querySelectorAll('.ch');
     }
 
-    // ── Main init ────────────────────────────────────────────────────────────
+    // Main init
     function initLanding() {
         var prefersReducedMotion =
             window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -228,8 +228,8 @@
         var authBtn = document.getElementById('auth-btn');
         var levelBtn = document.getElementById('level-panel-btn');
 
-        // ── Auth button visibility: show on hero, hide on modes/howtoplay,
-        //    show again on game section ────────────────────────────────────
+        // Auth button visibility: show on hero, hide on modes/howtoplay,
+        // show again on game section
         if (authBtn) {
             ScrollTrigger.create({
                 trigger: '#modes-section',
@@ -242,7 +242,7 @@
             });
         }
 
-        // ── Levels button visibility: only show when game section is in view ──
+        // Levels button visibility: only show when game section is in view
         if (levelBtn) {
             levelBtn.classList.add('hidden-offscreen');
             ScrollTrigger.create({
@@ -256,7 +256,7 @@
             });
         }
 
-        // ── Hero entrance ────────────────────────────────────────────────────
+        // Hero entrance
         if (!prefersReducedMotion) {
             var heroTL = gsap.timeline({ defaults: { ease: 'power3.out' } });
             heroTL
@@ -265,7 +265,7 @@
                 .from('.hero-ctas',    { opacity: 0, y: 22, duration: 0.65 }, '-=0.45');
         }
 
-        // ── Hero exit: content drifts up as user scrolls ──────────────────
+        // Hero exit: content drifts up as user scrolls
         if (!prefersReducedMotion) {
             gsap.to('.hero-content', {
                 scrollTrigger: {
@@ -280,7 +280,7 @@
             });
         }
 
-        // ── Character-by-character heading reveals ───────────────────────────
+        // Character-by-character heading reveals
         document.querySelectorAll('.section-heading').forEach(function (el) {
             var chars = splitHeading(el);
             if (prefersReducedMotion) return;
@@ -296,7 +296,7 @@
             });
         });
 
-        // ── Mode cards: stagger fade-up on scroll ────────────────────────────
+        // Mode cards: stagger fade-up on scroll
         if (!prefersReducedMotion) {
             gsap.from('.mode-card', {
                 scrollTrigger: { trigger: '#modes-section', start: 'top 75%' },
@@ -308,7 +308,7 @@
             });
         }
 
-        // ── How It Works: sticky notes drop in ───────────────────────────────
+        // How It Works: sticky notes drop in
         if (!prefersReducedMotion) {
             gsap.from('.step-card', {
                 scrollTrigger: { trigger: '.steps-row', start: 'top 80%' },
@@ -326,7 +326,7 @@
             });
         }
 
-        // ── Game board entrance ───────────────────────────────────────────────
+        // Game board entrance
         if (!prefersReducedMotion) {
             gsap.from('#game-section header', {
                 scrollTrigger: { trigger: '#game-section', start: 'top 78%' },
@@ -345,7 +345,7 @@
             });
         }
 
-        // ── Mode card 3D tilt + dynamic spotlight on hover ──────────────────────────
+        // Mode card 3D tilt + dynamic spotlight on hover
         document.querySelectorAll('.mode-card').forEach(function (card) {
             card.addEventListener('mousemove', function (e) {
                 var rect = card.getBoundingClientRect();
@@ -365,7 +365,7 @@
             });
         });
 
-        // ── Magnetic Buttons ──────────────────────────────────────────────────
+        // Magnetic Buttons
         var magneticBtns = document.querySelectorAll('.hero-play-btn, .hero-scroll-btn, .mode-card-play-btn');
         magneticBtns.forEach(function(btn) {
             btn.addEventListener('mousemove', function(e) {
@@ -389,7 +389,7 @@
             });
         });
 
-        // ── Scroll helpers ────────────────────────────────────────────────────
+        // Scroll helpers
         function scrollToGame() {
             gsap.to(window, {
                 scrollTo: { y: '#game-section', offsetY: 0 },
@@ -404,7 +404,7 @@
             });
         }
 
-        // ── CTA handlers ──────────────────────────────────────────────────────
+        // CTA handlers
         var heroPlayBtn   = document.getElementById('hero-play-btn');
         var heroScrollBtn = document.getElementById('hero-scroll-btn');
         var howtoPlayBtn  = document.getElementById('howtoplay-play-btn');
@@ -413,7 +413,7 @@
         if (heroScrollBtn) heroScrollBtn.addEventListener('click', scrollToModes);
         if (howtoPlayBtn)  howtoPlayBtn.addEventListener('click', scrollToGame);
 
-        // ── Mode card play buttons ─────────────────────────────────────────────
+        // Mode card play buttons
         document.querySelectorAll('.mode-card').forEach(function (card) {
             card.querySelector('.mode-card-play-btn').addEventListener('click', function (e) {
                 e.stopPropagation();

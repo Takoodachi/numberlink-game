@@ -56,6 +56,8 @@ class Game {
         this.speedrunCurrentTime = 0;
         this.currentWordLevelIndex = 0;
         this.maxUnlockedWordIndex = 0;
+        this.currentObstacleLevelIndex = 0;
+        this.maxUnlockedObstacleIndex = 0;
         this.lastScrollTop = 0;
         this.currentWordString = '';
         this.devEmail = 'luongdtran06@gmail.com';
@@ -67,6 +69,12 @@ class Game {
         this.solutionPath = [];
         this.userLines = [];
         this.wordLevels = [];
+        this.obstacleLevels = [];
+        this.obstacleWalls = [];
+        this.obstacleTeleporters = [];
+        this.obstacleTPGlowPhase = 0;
+        this.obstacleGlowRAF = null;
+        this.obstacleHintPts = null;
         this.numberIndices = {};
         this.speedrunBestTimes = {};
         this.optimalBestScores = {};
@@ -84,6 +92,7 @@ class Game {
         this.currentUser = null;
         this.searchTimeout = null;
         this.currentDragLine = null;
+        this.lastMoveCell = null;
         this.lastHintDate = null;
 
         this.colors = ['#6d28d9', '#ef4444', '#059669', '#2563eb', '#db2777', '#d97706', '#0891b2'];
@@ -104,6 +113,7 @@ class Game {
         this.initContact();
         this.initCarousel();
         this.fetchWordLevels();
+        this.fetchObstacleLevels();
     }
 
     initEventListeners() {
@@ -111,6 +121,15 @@ class Game {
         document.getElementById('btn-hint').onclick = () => this.useHint();
         document.getElementById('btn-reset').onclick = () => this.resetLevel();
         document.getElementById('theme-toggle').onclick = () => this.toggleTheme();
+
+        this.isGameSectionVisible = false;
+        const gameSection = document.getElementById('game-section');
+        if (gameSection) {
+            new IntersectionObserver(
+                ([entry]) => { this.isGameSectionVisible = entry.isIntersecting; },
+                { threshold: 0.1 }
+            ).observe(gameSection);
+        }
 
         window.addEventListener('resize', () => {
             this.resizeCanvas();
@@ -202,6 +221,7 @@ class Game {
 
     initCursorEffect() {
         if (this.isMobile) return;
+        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
 
         const dot = document.createElement('div');
         dot.id = 'cursor-dot';
@@ -556,6 +576,8 @@ class Game {
             this.streak = data.streak || 0;
             this.currentWordLevelIndex = data.currentWordLevelIndex || 0;
             this.maxUnlockedWordIndex = data.maxUnlockedWordIndex || 0;
+            this.currentObstacleLevelIndex = data.currentObstacleLevelIndex || 0;
+            this.maxUnlockedObstacleIndex = data.maxUnlockedObstacleIndex || 0;
             this.currentMode = data.currentMode || 'classic';
             this.hints = data.hints !== undefined ? data.hints : 2;
             this.lastHintDate = data.lastHintDate;
@@ -614,6 +636,8 @@ class Game {
             optimalBestScores: this.optimalBestScores,
             currentWordLevelIndex: this.currentWordLevelIndex,
             maxUnlockedWordIndex: this.maxUnlockedWordIndex,
+            currentObstacleLevelIndex: this.currentObstacleLevelIndex,
+            maxUnlockedObstacleIndex: this.maxUnlockedObstacleIndex,
             currentMode: this.currentMode,
         };
 
@@ -637,6 +661,8 @@ class Game {
         this.streak = cloudData.streak || 0;
         this.currentWordLevelIndex = cloudData.currentWordLevelIndex || 0;
         this.maxUnlockedWordIndex = cloudData.maxUnlockedWordIndex || 0;
+        this.currentObstacleLevelIndex = cloudData.currentObstacleLevelIndex || 0;
+        this.maxUnlockedObstacleIndex = cloudData.maxUnlockedObstacleIndex || 0;
         this.lastLoginDate = cloudData.lastLoginDate || null;
         this.speedrunBestTimes = cloudData.speedrunBestTimes || {};
         this.optimalBestScores = cloudData.optimalBestScores || {};
@@ -695,7 +721,7 @@ class Game {
         const searchContainer = document.querySelector('.search-container');
 
         if (searchContainer) {
-            if (this.currentMode === 'words') {
+            if (this.currentMode === 'words' || this.currentMode === 'obstacles') {
                 searchContainer.style.display = 'none';
             } else {
                 searchContainer.style.display = 'flex';
@@ -720,7 +746,7 @@ class Game {
         const panelSearch = document.querySelector('.level-panel-search');
 
         if (panelSearch) {
-            panelSearch.style.display = this.currentMode === 'words' ? 'none' : 'flex';
+            panelSearch.style.display = (this.currentMode === 'words' || this.currentMode === 'obstacles') ? 'none' : 'flex';
         }
 
         grid.scrollTop = 0;
@@ -734,9 +760,15 @@ class Game {
     }
 
     fillLevelGridInto(grid) {
-        const activeLevels = this.currentMode === 'words' ? this.wordLevels : this.allLevels;
-        const activeMaxUnlocked = this.currentMode === 'words' ? this.maxUnlockedWordIndex : this.maxUnlockedIndex;
-        const activeCurrentIndex = this.currentMode === 'words' ? this.currentWordLevelIndex : this.currentLevelIndex;
+        const activeLevels = this.currentMode === 'words' ? this.wordLevels
+                           : this.currentMode === 'obstacles' ? this.obstacleLevels
+                           : this.allLevels;
+        const activeMaxUnlocked = this.currentMode === 'words' ? this.maxUnlockedWordIndex
+                                : this.currentMode === 'obstacles' ? this.maxUnlockedObstacleIndex
+                                : this.maxUnlockedIndex;
+        const activeCurrentIndex = this.currentMode === 'words' ? this.currentWordLevelIndex
+                                 : this.currentMode === 'obstacles' ? this.currentObstacleLevelIndex
+                                 : this.currentLevelIndex;
 
         if (!activeLevels || activeLevels.length === 0) {
             grid.innerHTML = '<p style="color:var(--text-color); padding:20px;">Levels loading...</p>';
@@ -765,7 +797,9 @@ class Game {
         const target = parseInt(input.value, 10);
         if (isNaN(target) || target < 1) return;
 
-        const activeLevels = this.currentMode === 'words' ? this.wordLevels : this.allLevels;
+        const activeLevels = this.currentMode === 'words' ? this.wordLevels
+                           : this.currentMode === 'obstacles' ? this.obstacleLevels
+                           : this.allLevels;
         const idx = activeLevels.findIndex(l => (l.id || 0) === target);
         if (idx !== -1) {
             this.loadLevel(idx);
@@ -826,9 +860,54 @@ class Game {
         }
     }
 
+    async fetchObstacleLevels() {
+        try {
+            const response = await fetch('obstacles.enc');
+            const encodedText = await response.text();
+            this.obstacleLevels = JSON.parse(atob(encodedText.replace(/\s+/g, '')));
+            if (this.currentMode === 'obstacles') {
+                this.loadLevel(this.currentObstacleLevelIndex);
+            }
+        } catch (error) {
+            console.error("Failed to load obstacle levels:", error);
+        }
+    }
+
     loadLevel(index) {
         const uiControls = document.getElementById('ui-controls');
         if (uiControls) uiControls.style.display = 'flex';
+
+        if (this.currentMode === 'obstacles') {
+            this.currentObstacleLevelIndex = index;
+            const level = this.obstacleLevels[index];
+            if (!level) { this.grid = []; return; }
+
+            this.gridSize = level.size;
+            this.maxNumber = Math.max(...level.clues.map(c => c.val));
+            this.solutionPath = level.solution;
+            this.obstacleWalls = level.walls || [];
+            this.obstacleTeleporters = level.teleporters || [];
+            this.numberIndices = {};
+
+            this.grid = Array.from({length: this.gridSize}, (_, r) =>
+                Array.from({length: this.gridSize}, (_, c) => ({ r, c, val: null, type: 'empty' }))
+            );
+            for (const clue of level.clues) {
+                this.grid[clue.r][clue.c] = { r: clue.r, c: clue.c, val: clue.val, type: 'fixed' };
+                const pathIdx = this.solutionPath.findIndex(p => p.r === clue.r && p.c === clue.c);
+                if (pathIdx !== -1) this.numberIndices[clue.val] = pathIdx;
+            }
+
+            this.userLines = [];
+            this.currentDragLine = null;
+            this.isWinning = false;
+            this.startObstacleGlow();
+            this.resizeCanvas();
+            this.updateUI();
+            this.boardEntranceAnimation();
+            this.closeLevelPanel(); this.closeLevelModal();
+            return;
+        }
 
         if (this.currentMode === 'words') {
             this.currentWordLevelIndex = index;
@@ -994,34 +1073,53 @@ class Game {
         const rulesContainer = document.getElementById('dynamic-rules-content');
         if (!rulesContainer) return;
 
-        const controlsText = this.isMobile ? "Drag to link!" : "Drag or use arrow keys to link!";
         let rulesHTML = '';
 
-        if (this.currentMode === 'blindfold') {
-            rulesHTML += `<div class="rule-item"><div class="rule-icon">❓</div><div class="rule-text">Connect hidden numbers in order to reveal them!</div></div>`;
-            rulesHTML += `<div class="rule-item"><div class="rule-icon">▧</div><div class="rule-text">Fill every cell</div></div>`;
-            rulesHTML += `<div class="rule-item"><div class="rule-icon">≠</div><div class="rule-text">Lines cannot cross</div></div>`;
+        if (this.currentMode === 'classic') {
+            rulesHTML += `<div class="rule-item"><div class="rule-icon">1-2-3</div><div class="rule-text">Connect the numbers in order: 1 → 2 → 3 → …</div></div>`;
+            rulesHTML += `<div class="rule-item"><div class="rule-icon">▧</div><div class="rule-text">Your path must fill every cell on the grid</div></div>`;
+            rulesHTML += `<div class="rule-item"><div class="rule-icon">≠</div><div class="rule-text">Paths cannot cross or overlap</div></div>`;
+            rulesHTML += `<div class="rule-item"><div class="rule-icon">🎮</div><div class="rule-text">${this.isMobile ? 'Drag from number to number' : 'Drag from number to number, or use arrow keys'}</div></div>`;
+        } else if (this.currentMode === 'speedrun') {
+            rulesHTML += `<div class="rule-item"><div class="rule-icon">⏱️</div><div class="rule-text">Same rules as Classic — but the clock is running!</div></div>`;
+            rulesHTML += `<div class="rule-item"><div class="rule-icon">1-2-3</div><div class="rule-text">Connect numbers in order and fill every cell</div></div>`;
+            rulesHTML += `<div class="rule-item"><div class="rule-icon">🏆</div><div class="rule-text">Your best time per level is saved to the leaderboard</div></div>`;
+            rulesHTML += `<div class="rule-item"><div class="rule-icon">🎮</div><div class="rule-text">${this.isMobile ? 'Drag from number to number' : 'Drag from number to number, or use arrow keys'}</div></div>`;
+        } else if (this.currentMode === 'blindfold') {
+            rulesHTML += `<div class="rule-item"><div class="rule-icon">❓</div><div class="rule-text">All numbers are hidden — connect them in order from memory</div></div>`;
+            rulesHTML += `<div class="rule-item"><div class="rule-icon">👁️</div><div class="rule-text">A correct connection reveals both endpoints; a wrong one stays hidden</div></div>`;
+            rulesHTML += `<div class="rule-item"><div class="rule-icon">▧</div><div class="rule-text">Fill every cell — paths cannot cross</div></div>`;
+            rulesHTML += `<div class="rule-item"><div class="rule-icon">🎮</div><div class="rule-text">${this.isMobile ? 'Drag from number to number' : 'Drag from number to number, or use arrow keys'}</div></div>`;
         } else if (this.currentMode === 'optimal') {
-            rulesHTML += `<div class="rule-item"><div class="rule-icon">1-2-3</div><div class="rule-text">Connect numbers in order</div></div>`;
-            rulesHTML += `<div class="rule-item"><div class="rule-icon">📏</div><div class="rule-text">Use the fewest tiles possible</div></div>`;
-            rulesHTML += `<div class="rule-item"><div class="rule-icon">≠</div><div class="rule-text">Lines cannot cross</div></div>`;
+            rulesHTML += `<div class="rule-item"><div class="rule-icon">1-2-3</div><div class="rule-text">Connect numbers in order — but you do NOT need to fill every cell</div></div>`;
+            rulesHTML += `<div class="rule-item"><div class="rule-icon">📏</div><div class="rule-text">Use as few tiles as possible — your efficiency score is what matters</div></div>`;
+            rulesHTML += `<div class="rule-item"><div class="rule-icon">≠</div><div class="rule-text">Paths cannot cross or overlap</div></div>`;
+            rulesHTML += `<div class="rule-item"><div class="rule-icon">🎮</div><div class="rule-text">${this.isMobile ? 'Drag from number to number' : 'Drag from number to number, or use arrow keys'}</div></div>`;
         } else if (this.currentMode === 'words') {
-            rulesHTML += `<div class="rule-item"><div class="rule-icon">A-Z</div><div class="rule-text">Connect the highlighted start and end letters</div></div>`;
-            rulesHTML += `<div class="rule-item"><div class="rule-icon">📖</div><div class="rule-text">Spell a valid dictionary word</div></div>`;
-            rulesHTML += `<div class="rule-item"><div class="rule-icon">≠</div><div class="rule-text">Lines cannot cross</div></div>`;
-            rulesHTML += `<div class="rule-item"><div class="rule-icon">💡</div><div class="rule-text">Check out the definition of the word after you finish a level by clicking on Show Answer!</div></div>`;
-        } else {
-            rulesHTML += `<div class="rule-item"><div class="rule-icon">1-2-3</div><div class="rule-text">Connect numbers in order</div></div>`;
-            rulesHTML += `<div class="rule-item"><div class="rule-icon">▧</div><div class="rule-text">Fill every cell</div></div>`;
-            rulesHTML += `<div class="rule-item"><div class="rule-icon">≠</div><div class="rule-text">Lines cannot cross</div></div>`;
+            rulesHTML += `<div class="rule-item"><div class="rule-icon">A→Z</div><div class="rule-text">Trace a path from the highlighted start letter to the highlighted end letter</div></div>`;
+            rulesHTML += `<div class="rule-item"><div class="rule-icon">📖</div><div class="rule-text">The letters you pass through must spell a valid dictionary word</div></div>`;
+            rulesHTML += `<div class="rule-item"><div class="rule-icon">💡</div><div class="rule-text">Use "Show Answer" after solving to read the word's definition</div></div>`;
+            rulesHTML += `<div class="rule-item"><div class="rule-icon">🎮</div><div class="rule-text">${this.isMobile ? 'Drag from letter to letter' : 'Drag from letter to letter, or use arrow keys'}</div></div>`;
+        } else if (this.currentMode === 'obstacles') {
+            rulesHTML += `<div class="rule-item"><div class="rule-icon">⌨️</div><div class="rule-text">Use ↑ ↓ ← → or W A S D to move — no mouse or touch</div></div>`;
+            rulesHTML += `<div class="rule-item"><div class="rule-icon">1-2-3</div><div class="rule-text">Connect numbers in order and fill every cell</div></div>`;
+            rulesHTML += `<div class="rule-item"><div class="rule-icon">🧱</div><div class="rule-text">Thick borders are walls — your path cannot pass through them</div></div>`;
+            rulesHTML += `<div class="rule-item"><div class="rule-icon">✨</div><div class="rule-text">Glowing icons are teleporters — step onto one to jump instantly to its paired partner (works from any direction)</div></div>`;
         }
 
-        rulesHTML += `
-            <div class="rule-item">
-                <div class="rule-icon">🎮</div>
-                <div class="rule-text">${controlsText}</div>
-            </div>
-        `;
+        if (!this.isMobile) {
+            rulesHTML += `
+                <div class="rule-shortcuts">
+                    <div class="shortcuts-title">Keyboard shortcuts</div>
+                    <div class="shortcuts-grid">
+                        <span class="shortcut-key">Ctrl Z</span><span class="shortcut-desc">Undo</span>
+                        <span class="shortcut-key">Esc</span><span class="shortcut-desc">Cancel line</span>
+                        <span class="shortcut-key">H</span><span class="shortcut-desc">Hint</span>
+                        <span class="shortcut-key">R</span><span class="shortcut-desc">Reset level</span>
+                    </div>
+                </div>
+            `;
+        }
 
         rulesContainer.innerHTML = rulesHTML;
     }
@@ -1079,7 +1177,7 @@ class Game {
         this.carouselBoards = Array.from(document.querySelectorAll('.carousel-board'));
         this.carouselPrevBtn = document.getElementById('carousel-prev');
         this.carouselNextBtn = document.getElementById('carousel-next');
-        this.carouselModes = ['classic', 'speedrun', 'blindfold', 'optimal', 'words'];
+        this.carouselModes = ['classic', 'speedrun', 'blindfold', 'optimal', 'obstacles', 'words'];
 
         this.carouselIndex = this.carouselModes.indexOf(this.currentMode);
         if (this.carouselIndex === -1) this.carouselIndex = 0;
@@ -1272,21 +1370,12 @@ class Game {
 
     setGameMode(mode, isInitialLoad = false) {
         if (this.currentMode === mode) return;
+        if (this.currentMode === 'obstacles') this.stopObstacleGlow();
         this.currentMode = mode;
 
-        const modeButtons = document.querySelectorAll('.gamemode-btn');
-        const modes = ['classic', 'speedrun', 'blindfold', 'optimal', 'words'];
-        modeButtons.forEach((btn, index) => {
-            if (modes[index] === mode) {
-                btn.classList.remove('btn-secondary');
-                btn.classList.add('btn-primary');
-            } else {
-                btn.classList.remove('btn-primary');
-                btn.classList.add('btn-secondary');
-            }
-        });
-
-        const targetIndex = mode === 'words' ? this.maxUnlockedWordIndex : this.maxUnlockedIndex;
+        const targetIndex = mode === 'words' ? this.maxUnlockedWordIndex
+                          : mode === 'obstacles' ? this.maxUnlockedObstacleIndex
+                          : this.maxUnlockedIndex;
         this.loadLevel(targetIndex);
 
         this.updateRulesUI();
@@ -1294,7 +1383,8 @@ class Game {
         let displayMode = mode === 'classic' ? 'Number Link' :
             mode === 'optimal' ? 'Optimal Path' :
                 mode === 'words' ? 'Connecting Letters' :
-                    mode.charAt(0).toUpperCase() + mode.slice(1);
+                    mode === 'obstacles' ? 'Obstacles' :
+                        mode.charAt(0).toUpperCase() + mode.slice(1);
 
         const mainTitle = document.getElementById('main-game-title');
         if (mainTitle) {
@@ -1303,11 +1393,15 @@ class Game {
 
         // FIX: Don't show toast or force a save if the game is just booting up
         if (!isInitialLoad) {
-            this.showToast(`Switched to ${displayMode} Mode`, 2000);
+            if (mode === 'obstacles') {
+                this.showToast('Obstacles — navigate with ↑↓←→ or WASD', 4000);
+            } else {
+                this.showToast(`Switched to ${displayMode} Mode`, 2000);
+            }
             this.saveProgress();
         }
 
-        if (['blindfold', 'optimal', 'words'].includes(mode)) {
+        if (['blindfold', 'optimal', 'words', 'obstacles'].includes(mode)) {
             const rulesKey = `hasSeenRules_${mode}`;
             if (!localStorage.getItem(rulesKey)) {
                 localStorage.setItem(rulesKey, 'true');
@@ -1385,6 +1479,11 @@ class Game {
     getLineAt(r, c) { return this.userLines.find(line => line.points.some(p => p.r === r && p.c === c)); }
 
     handleStart(e, isTouch) {
+        if (this.currentMode === 'obstacles') {
+            this.showToast('Obstacles: use ↑↓←→ or WASD — no mouse/touch', 3000);
+            return;
+        }
+
         if (this.currentMode === 'speedrun' && !this.isSpeedrunActive) {
             this.startSpeedrun();
         }
@@ -1419,20 +1518,73 @@ class Game {
             if (isValidStart) {
                 this.isDrawing = true;
                 this.currentDragLine = { startVal: cell.val, points: [{ r, c }], widthScale: 0.45 };
+                this.lastMoveCell = { r, c };
                 this.draw();
             }
         }
     }
 
-    handleEnd() { this.isDrawing = false; this.currentDragLine = null; this.draw(); }
+    handleEnd() {
+        this.isDrawing = false;
+        this.currentDragLine = null;
+        this.lastMoveCell = null;
+        this.draw();
+    }
 
     handleMove(e, isTouch) {
+        if (this.currentMode === 'obstacles') return;
         if (!this.isDrawing || !this.currentDragLine || this.isWinning) return;
         if (isTouch) e.preventDefault();
         const { r, c } = this.getPos(e, isTouch);
         if (!this.isValidCell(r, c)) return;
 
+        // Prevent re-processing the same cell (avoids TP oscillation during drag)
+        if (this.lastMoveCell && this.lastMoveCell.r === r && this.lastMoveCell.c === c) return;
+        this.lastMoveCell = { r, c };
+
+        const dl = this.currentDragLine;
+        if (dl.tpJustOccurred) {
+            const pts = dl.points;
+            const last = pts[pts.length - 1];
+            const secondLast = pts.length >= 2 ? pts[pts.length - 2] : null;
+            if (secondLast && r === secondLast.r && c === secondLast.c) {
+                // Cursor moved back to entry TP cell — allow backtrack through TP
+                dl.tpJustOccurred = false;
+            } else if (Math.abs(r - last.r) + Math.abs(c - last.c) === 1) {
+                // Cursor adjacent to exit TP — clear flag and continue drawing
+                dl.tpJustOccurred = false;
+            } else {
+                return; // Cursor still far from exit TP — hold
+            }
+        }
+
         this.attemptMove(r, c);
+    }
+
+    hasObstacleWall(r1, c1, r2, c2) {
+        if (this.currentMode !== 'obstacles' || !this.obstacleWalls.length) return false;
+        const dr = r2 - r1, dc = c2 - c1;
+        return this.obstacleWalls.some(w => {
+            if (dr === 0 && dc === 1)  return w.r === r1 && w.c === c1 && w.side === 'right';
+            if (dr === 0 && dc === -1) return w.r === r1 && w.c === c2 && w.side === 'right';
+            if (dr === 1 && dc === 0)  return w.r === r1 && w.c === c1 && w.side === 'bottom';
+            if (dr === -1 && dc === 0) return w.r === r2 && w.c === c2 && w.side === 'bottom';
+            return false;
+        });
+    }
+
+    getObstacleTP(r, c) {
+        if (this.currentMode !== 'obstacles') return null;
+        return this.obstacleTeleporters.find(t => t.r === r && t.c === c) || null;
+    }
+
+    isValidTPEntry(fromR, fromC, toR, toC, dir) {
+        const dr = toR - fromR, dc = toC - fromC;
+        if (dir === 'right') return dr === 0 && dc === 1;
+        if (dir === 'left')  return dr === 0 && dc === -1;
+        if (dir === 'down')  return dr === 1 && dc === 0;
+        if (dir === 'up')    return dr === -1 && dc === 0;
+        return false;
     }
 
     attemptMove(r, c) {
@@ -1441,12 +1593,38 @@ class Game {
 
         if (r === last.r && c === last.c) return;
 
+        // Backtrack: moving to second-to-last point
         if (pts.length > 1) {
             const prev = pts[pts.length - 2];
-            if (prev.r === r && prev.c === c) { pts.pop(); this.draw(); return; }
+            if (prev.r === r && prev.c === c) {
+                pts.pop();
+                // If the new tail is a TP entry, also pop the exit (they come in pairs)
+                if (pts.length >= 1 && pts[pts.length - 1].isTPEntry) pts.pop();
+                this.draw();
+                return;
+            }
         }
 
         if (Math.abs(r - last.r) + Math.abs(c - last.c) !== 1) return;
+
+        // Wall check
+        if (this.hasObstacleWall(last.r, last.c, r, c)) return;
+
+        // Teleporter check
+        const tp = this.getObstacleTP(r, c);
+        if (tp) {
+            const partner = this.obstacleTeleporters.find(t => t.pair === tp.pair && !(t.r === r && t.c === c));
+            if (!partner) return;
+            if (this.isCellOccupied(r, c) || this.isCellOccupied(partner.r, partner.c)) return;
+            pts.push({ r, c, isTPEntry: true });
+            pts.push({ r: partner.r, c: partner.c });
+            this.currentDragLine.tpJustOccurred = true;
+            this.triggerTileAnimation(r, c);
+            this.triggerTileAnimation(partner.r, partner.c);
+            this.flashTPRipple(r, c, partner.r, partner.c);
+            this.draw();
+            return;
+        }
 
         if (this.isCellOccupied(r, c)) {
             const target = this.grid[r][c];
@@ -1514,14 +1692,52 @@ class Game {
     }
 
     handleKeyDown(e) {
+        if (!this.isGameSectionVisible) return;
         if (this.isWinning) return;
+
+        const carouselOpen = this.carouselOverlay && !this.carouselOverlay.classList.contains('hidden');
+        const modalOpen = document.querySelector('.modal-overlay.open') !== null;
+        const typingInInput = document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA');
+
+        if (!carouselOpen && !modalOpen && !typingInInput) {
+            if ((e.key === 'z' || e.key === 'Z') && (e.ctrlKey || e.metaKey)) {
+                e.preventDefault();
+                this.undo();
+                return;
+            }
+            if (e.key === 'Escape') {
+                if (this.isDrawing && this.currentDragLine) {
+                    e.preventDefault();
+                    this.isDrawing = false;
+                    this.currentDragLine = null;
+                    this.draw();
+                }
+                return;
+            }
+            if (e.key === 'h' || e.key === 'H') {
+                e.preventDefault();
+                this.useHint();
+                return;
+            }
+            if (e.key === 'r' || e.key === 'R') {
+                e.preventDefault();
+                this.resetLevel();
+                return;
+            }
+        }
 
         let dr = 0, dc = 0;
         if (e.key === 'ArrowUp') dr = -1;
         else if (e.key === 'ArrowDown') dr = 1;
         else if (e.key === 'ArrowLeft') dc = -1;
         else if (e.key === 'ArrowRight') dc = 1;
-        else return;
+        else if (!carouselOpen && !modalOpen && !typingInInput) {
+            if (e.key === 'w' || e.key === 'W') dr = -1;
+            else if (e.key === 's' || e.key === 'S') dr = 1;
+            else if (e.key === 'a' || e.key === 'A') dc = -1;
+            else if (e.key === 'd' || e.key === 'D') dc = 1;
+            else return;
+        } else return;
 
         e.preventDefault();
 
@@ -1595,7 +1811,17 @@ class Game {
 
     isValidCell(r, c) { return r >= 0 && r < this.gridSize && c >= 0 && c < this.gridSize; }
 
-    undo() { if (this.userLines.length > 0 && !this.isWinning) { this.userLines.pop(); this.draw(); } }
+    undo() {
+        if (this.isWinning) return;
+        if (this.isDrawing && this.currentDragLine) {
+            this.isDrawing = false;
+            this.currentDragLine = null;
+            this.draw();
+        } else if (this.userLines.length > 0) {
+            this.userLines.pop();
+            this.draw();
+        }
+    }
 
     resetLevel() {
         if (!this.isWinning) {
@@ -1716,8 +1942,18 @@ class Game {
             this.saveProgress();
         }
 
+        if (this.currentMode === 'words') {
+            this.showWordsHint();
+            return;
+        }
+
         if (this.currentMode === 'optimal') {
             this.showOptimalHint();
+            return;
+        }
+
+        if (this.currentMode === 'obstacles') {
+            this.showObstaclesHint();
             return;
         }
 
@@ -1790,6 +2026,48 @@ class Game {
         setTimeout(() => this.draw(), 2000);
     }
 
+    showObstaclesHint() {
+        const sol = this.solutionPath;
+        if (!sol || sol.length < 2) return;
+
+        // In Obstacles, the active path lives in currentDragLine, not userLines
+        let headR, headC;
+        if (this.currentDragLine && this.currentDragLine.points.length > 0) {
+            const pts = this.currentDragLine.points;
+            headR = pts[pts.length - 1].r;
+            headC = pts[pts.length - 1].c;
+        } else if (this.userLines.length > 0) {
+            const last = this.userLines[this.userLines.length - 1];
+            const pts = last.points;
+            headR = pts[pts.length - 1].r;
+            headC = pts[pts.length - 1].c;
+        } else {
+            headR = sol[0].r;
+            headC = sol[0].c;
+        }
+
+        let startIdx = sol.findIndex(p => p.r === headR && p.c === headC);
+        if (startIdx === -1) startIdx = 0;
+
+        // Collect up to 6 steps forward; stop before any TP jump
+        const hintPts = [sol[startIdx]];
+        for (let i = startIdx + 1; i < sol.length && hintPts.length <= 6; i++) {
+            const prev = sol[i - 1], curr = sol[i];
+            if (Math.abs(prev.r - curr.r) + Math.abs(prev.c - curr.c) > 1) break;
+            hintPts.push(curr);
+        }
+        if (hintPts.length < 2) return;
+
+        // Store as state so the glow loop's draw() calls keep rendering it
+        this.obstacleHintPts = hintPts;
+        this.draw();
+        if (this.obstacleHintTimeout) clearTimeout(this.obstacleHintTimeout);
+        this.obstacleHintTimeout = setTimeout(() => {
+            this.obstacleHintPts = null;
+            this.draw();
+        }, 2000);
+    }
+
     findShortestPath(startR, startC, endR, endC) {
         const queue = [[startR, startC, [{ r: startR, c: startC }]]];
         const visited = new Set([`${startR},${startC}`]);
@@ -1806,6 +2084,146 @@ class Game {
             }
         }
         return null;
+    }
+
+    findWordSolutionPath(word) {
+        const start = this.numberIndices[1];
+        const end = this.numberIndices[2];
+        if (!start || !end) return null;
+        if (this.grid[start.r][start.c].letter !== word[0]) return null;
+        if (this.grid[end.r][end.c].letter !== word[word.length - 1]) return null;
+
+        const visited = new Set([`${start.r},${start.c}`]);
+        const path = [{ r: start.r, c: start.c }];
+
+        const dfs = (r, c, idx) => {
+            if (idx === word.length - 1) return r === end.r && c === end.c;
+            for (const [dr, dc] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+                const nr = r + dr, nc = c + dc;
+                const key = `${nr},${nc}`;
+                if (nr >= 0 && nr < this.gridSize && nc >= 0 && nc < this.gridSize
+                    && !visited.has(key) && this.grid[nr][nc].letter === word[idx + 1]) {
+                    visited.add(key);
+                    path.push({ r: nr, c: nc });
+                    if (dfs(nr, nc, idx + 1)) return true;
+                    path.pop();
+                    visited.delete(key);
+                }
+            }
+            return false;
+        };
+
+        return dfs(start.r, start.c, 0) ? [...path] : null;
+    }
+
+    showWordsHint() {
+        const level = this.wordLevels[this.currentWordLevelIndex];
+        if (!level) return;
+
+        const currentPoints = this.userLines.length > 0
+            ? this.userLines[0].points
+            : (this.currentDragLine ? this.currentDragLine.points : []);
+
+        let solutionPath = null;
+        let hintStartIdx = 0;
+
+        if (currentPoints.length > 0) {
+            const partialWord = currentPoints.map(p => this.grid[p.r][p.c].letter).join('');
+            for (const word of level.validWords) {
+                if (word.startsWith(partialWord)) {
+                    const candidate = this.findWordSolutionPath(word);
+                    if (candidate) {
+                        let matches = currentPoints.every((pt, i) =>
+                            candidate[i] && candidate[i].r === pt.r && candidate[i].c === pt.c
+                        );
+                        if (matches) {
+                            solutionPath = candidate;
+                            hintStartIdx = currentPoints.length - 1;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        if (!solutionPath) {
+            for (const word of level.validWords) {
+                solutionPath = this.findWordSolutionPath(word);
+                if (solutionPath) break;
+            }
+            hintStartIdx = 0;
+        }
+
+        if (!solutionPath) return;
+
+        const hintEndIdx = Math.min(hintStartIdx + 4, solutionPath.length - 1);
+        const hintPoints = solutionPath.slice(hintStartIdx, hintEndIdx + 1);
+
+        const ctx = this.ctx;
+        const cs = this.cellSize;
+        const cx = c => c * cs + cs / 2;
+        const cy = r => r * cs + cs / 2;
+
+        ctx.save();
+        ctx.globalAlpha = 0.6;
+        ctx.strokeStyle = this.isDarkMode ? "#FFFF00" : "#FFD700";
+        ctx.lineWidth = cs * 0.4;
+        ctx.lineCap = "round"; ctx.lineJoin = "round";
+        ctx.beginPath();
+        ctx.moveTo(cx(hintPoints[0].c), cy(hintPoints[0].r));
+        for (let i = 1; i < hintPoints.length; i++) ctx.lineTo(cx(hintPoints[i].c), cy(hintPoints[i].r));
+        ctx.stroke();
+        ctx.restore();
+        setTimeout(() => this.draw(), 2000);
+    }
+
+    // Obstacles helpers
+
+    startObstacleGlow() {
+        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+        if (this.obstacleGlowRAF) cancelAnimationFrame(this.obstacleGlowRAF);
+        const tick = () => {
+            this.obstacleTPGlowPhase = (Date.now() % 2000) / 2000; // 0-1 cycle
+            if (this.currentMode === 'obstacles' && !this.isWinning) {
+                this.draw();
+                this.obstacleGlowRAF = requestAnimationFrame(tick);
+            }
+        };
+        this.obstacleGlowRAF = requestAnimationFrame(tick);
+    }
+
+    stopObstacleGlow() {
+        if (this.obstacleGlowRAF) {
+            cancelAnimationFrame(this.obstacleGlowRAF);
+            this.obstacleGlowRAF = null;
+        }
+    }
+
+    flashTPRipple(r1, c1, r2, c2) {
+        const ctx = this.ctx;
+        const cs = this.cellSize;
+        const cx = c => c * cs + cs / 2;
+        const cy = r => r * cs + cs / 2;
+        const accentColor = getComputedStyle(document.body).getPropertyValue('--accent').trim() || '#6d28d9';
+        let frame = 0;
+        const animate = () => {
+            if (frame > 20) { this.draw(); return; }
+            frame++;
+            const t = frame / 20;
+            const radius = cs * 0.5 * t;
+            ctx.save();
+            ctx.globalAlpha = (1 - t) * 0.7;
+            ctx.strokeStyle = accentColor;
+            ctx.lineWidth = 3;
+            for (const [r, c] of [[r1, c1], [r2, c2]]) {
+                ctx.beginPath();
+                ctx.arc(cx(c), cy(r), radius, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+            ctx.restore();
+            requestAnimationFrame(animate);
+        };
+        requestAnimationFrame(animate);
     }
 
     checkDailyHint() {
@@ -1866,21 +2284,23 @@ class Game {
     // Animation Methods
     handleLevelComplete() {
         if (this.currentMode === 'words') {
-            if (this.currentWordLevelIndex === this.maxUnlockedWordIndex) {
-                this.maxUnlockedWordIndex++;
-            }
+            if (this.currentWordLevelIndex === this.maxUnlockedWordIndex) this.maxUnlockedWordIndex++;
+        } else if (this.currentMode === 'obstacles') {
+            if (this.currentObstacleLevelIndex === this.maxUnlockedObstacleIndex) this.maxUnlockedObstacleIndex++;
         } else {
-            if (this.currentLevelIndex === this.maxUnlockedIndex) {
-                this.maxUnlockedIndex++;
-            }
+            if (this.currentLevelIndex === this.maxUnlockedIndex) this.maxUnlockedIndex++;
         }
 
         this.showToast('Level Complete! 🎉', 2000);
         this.startCelebration();
 
         if (typeof gtag === 'function') {
-            const activeLevels = this.currentMode === 'words' ? this.wordLevels : this.allLevels;
-            const activeIndex = this.currentMode === 'words' ? this.currentWordLevelIndex : this.currentLevelIndex;
+            const activeLevels = this.currentMode === 'words' ? this.wordLevels
+                               : this.currentMode === 'obstacles' ? this.obstacleLevels
+                               : this.allLevels;
+            const activeIndex = this.currentMode === 'words' ? this.currentWordLevelIndex
+                              : this.currentMode === 'obstacles' ? this.currentObstacleLevelIndex
+                              : this.currentLevelIndex;
             gtag('event', 'level_complete', {
                 'level_index': activeIndex,
                 'level_id': activeLevels[activeIndex] ? activeLevels[activeIndex].id : (activeIndex + 1)
@@ -1896,7 +2316,18 @@ class Game {
                     this.saveProgress();
                     this.loadLevel(this.currentWordLevelIndex);
                 } else {
-                    alert("You have beaten all Connecting Letters levels!");
+                    this.showToast("You've beaten all Connecting Letters levels! 🎉", 4000);
+                }
+                return;
+            }
+
+            if (this.currentMode === 'obstacles') {
+                if (this.currentObstacleLevelIndex + 1 < this.obstacleLevels.length) {
+                    this.currentObstacleLevelIndex++;
+                    this.saveProgress();
+                    this.loadLevel(this.currentObstacleLevelIndex);
+                } else {
+                    this.showToast("You've beaten all Obstacles levels! 🎉", 4000);
                 }
                 return;
             }
@@ -1927,7 +2358,7 @@ class Game {
                 this.saveProgress();
                 this.loadLevel(this.currentLevelIndex);
             } else {
-                alert("You have beaten all levels!");
+                this.showToast("You've beaten all levels! 🎉", 4000);
             }
         }, 2000);
     }
@@ -1992,11 +2423,20 @@ class Game {
                     bestTimeDisplay.innerText = `Best: --`;
                 }
             }
+        } else if (this.currentMode === 'obstacles') {
+            hintsDisplay.innerText = this.isDevMode ? `Hints: ∞ (Dev)` : `Hints: ${this.hints}`;
+            hintBtn.innerText = "Hint";
+            hintBtn.onclick = () => this.useHint();
+            hintBtn.disabled = false;
+            hintBtn.style.opacity = '1';
+            answerBtn.style.display = 'none';
+            if (bestTimeDisplay) bestTimeDisplay.style.display = 'none';
         } else if (this.currentMode === 'words') {
             // level-select-btn removed
             hintBtn.innerText = "Hint";
-            hintBtn.disabled = true;
-            hintBtn.style.opacity = '0.5';
+            hintBtn.onclick = () => this.useHint();
+            hintBtn.disabled = false;
+            hintBtn.style.opacity = '1';
             if (bestTimeDisplay) bestTimeDisplay.style.display = 'none';
 
             if (this.currentWordLevelIndex < this.maxUnlockedWordIndex || this.isDevMode) {
@@ -2099,6 +2539,12 @@ class Game {
             ctx.stroke();
         }
 
+        // Obstacles: draw walls and teleporters
+        if (this.currentMode === 'obstacles' && !isAnimating) {
+            this.drawObstacleWalls(ctx, cs);
+            this.drawObstacleTeleporters(ctx, cs, cx, cy);
+        }
+
         const drawPoly = (points, wScale = 0.5) => {
             if (points.length < 2) return;
             ctx.beginPath(); ctx.lineCap = "round"; ctx.lineJoin = "round";
@@ -2106,14 +2552,20 @@ class Game {
             ctx.lineWidth = cs * wScale;
             ctx.strokeStyle = lineColor;
             ctx.moveTo(cx(points[0].c), cy(points[0].r));
-            for (let i = 1; i < points.length; i++) ctx.lineTo(cx(points[i].c), cy(points[i].r));
+            for (let i = 1; i < points.length; i++) {
+                if (points[i - 1].isTPEntry) ctx.moveTo(cx(points[i].c), cy(points[i].r));
+                else ctx.lineTo(cx(points[i].c), cy(points[i].r));
+            }
             ctx.stroke();
 
             ctx.beginPath();
             ctx.lineWidth = cs * (wScale * 0.3);
             ctx.strokeStyle = "rgba(255, 255, 255, 0.3)";
             ctx.moveTo(cx(points[0].c), cy(points[0].r));
-            for (let i = 1; i < points.length; i++) ctx.lineTo(cx(points[i].c), cy(points[i].r));
+            for (let i = 1; i < points.length; i++) {
+                if (points[i - 1].isTPEntry) ctx.moveTo(cx(points[i].c), cy(points[i].r));
+                else ctx.lineTo(cx(points[i].c), cy(points[i].r));
+            }
             ctx.stroke();
         };
 
@@ -2145,6 +2597,7 @@ class Game {
                         for (let i = 0; i < pts.length - 1; i++) {
                             const p1 = pts[i]; const p2 = pts[i + 1];
                             if (excludeSet.has(`${p1.r},${p1.c}`) && excludeSet.has(`${p2.r},${p2.c}`)) continue;
+                            if (p1.isTPEntry) continue;
                             ctx.moveTo(cx(p1.c), cy(p1.r));
                             ctx.lineTo(cx(p2.c), cy(p2.r));
                         }
@@ -2156,6 +2609,7 @@ class Game {
                         for (let i = 0; i < pts.length - 1; i++) {
                             const p1 = pts[i]; const p2 = pts[i + 1];
                             if (excludeSet.has(`${p1.r},${p1.c}`) && excludeSet.has(`${p2.r},${p2.c}`)) continue;
+                            if (p1.isTPEntry) continue;
                             ctx.moveTo(cx(p1.c), cy(p1.r));
                             ctx.lineTo(cx(p2.c), cy(p2.r));
                         }
@@ -2230,14 +2684,148 @@ class Game {
             }
         }
 
+        // Obstacles hint overlay — drawn every frame so glow loop doesn't erase it
+        if (this.obstacleHintPts && this.obstacleHintPts.length >= 2) {
+            ctx.save();
+            ctx.globalAlpha = 0.65;
+            ctx.strokeStyle = this.isDarkMode ? '#FFFF00' : '#FFD700';
+            ctx.lineWidth = cs * 0.4;
+            ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+            ctx.beginPath();
+            ctx.moveTo(cx(this.obstacleHintPts[0].c), cy(this.obstacleHintPts[0].r));
+            for (let i = 1; i < this.obstacleHintPts.length; i++) {
+                ctx.lineTo(cx(this.obstacleHintPts[i].c), cy(this.obstacleHintPts[i].r));
+            }
+            ctx.stroke();
+            ctx.restore();
+        }
+
         if (keepAnimating) {
             requestAnimationFrame(() => this.draw());
+        }
+    }
+
+    // Obstacles drawing helpers
+
+    _roundRect(ctx, x, y, w, h, r) {
+        if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); return; }
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.lineTo(x + w - r, y); ctx.arcTo(x + w, y, x + w, y + r, r);
+        ctx.lineTo(x + w, y + h - r); ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+        ctx.lineTo(x + r, y + h); ctx.arcTo(x, y + h, x, y + h - r, r);
+        ctx.lineTo(x, y + r); ctx.arcTo(x, y, x + r, y, r);
+        ctx.closePath();
+    }
+
+    drawObstacleWalls(ctx, cs) {
+        const wallColor = this.isDarkMode ? '#f97316' : '#c2410c';
+        ctx.strokeStyle = wallColor;
+        ctx.lineCap = 'square';
+        const W = Math.max(4, cs * 0.12);
+        ctx.lineWidth = W;
+
+        for (const w of this.obstacleWalls) {
+            ctx.beginPath();
+            if (w.side === 'right') {
+                const x = (w.c + 1) * cs;
+                ctx.moveTo(x, w.r * cs);
+                ctx.lineTo(x, (w.r + 1) * cs);
+            } else { // bottom
+                const y = (w.r + 1) * cs;
+                ctx.moveTo(w.c * cs, y);
+                ctx.lineTo((w.c + 1) * cs, y);
+            }
+            ctx.stroke();
+        }
+        ctx.lineCap = 'round';
+    }
+
+    // Distinct colors per TP pair so connected portals are visually linked
+    _tpPairColor(pair) {
+        const palette = ['#a855f7', '#06b6d4', '#f59e0b', '#10b981'];
+        return palette[pair % palette.length];
+    }
+
+    // Pair-specific icon shape: same shape = same pair = same destination
+    _drawTPPairIcon(ctx, pair, s) {
+        ctx.beginPath();
+        switch (pair % 4) {
+            case 0: // Triangle ▲
+                ctx.moveTo(0, -s);
+                ctx.lineTo(s * 0.866, s * 0.5);
+                ctx.lineTo(-s * 0.866, s * 0.5);
+                ctx.closePath();
+                ctx.fill();
+                break;
+            case 1: // 5-pointed star ★
+                for (let i = 0; i < 10; i++) {
+                    const angle = (i * Math.PI / 5) - Math.PI / 2;
+                    const rr = i % 2 === 0 ? s : s * 0.4;
+                    if (i === 0) ctx.moveTo(rr * Math.cos(angle), rr * Math.sin(angle));
+                    else ctx.lineTo(rr * Math.cos(angle), rr * Math.sin(angle));
+                }
+                ctx.closePath();
+                ctx.fill();
+                break;
+            case 2: // Diamond ◆
+                ctx.moveTo(0, -s);
+                ctx.lineTo(s * 0.65, 0);
+                ctx.lineTo(0, s);
+                ctx.lineTo(-s * 0.65, 0);
+                ctx.closePath();
+                ctx.fill();
+                break;
+            case 3: // Circle ●
+                ctx.arc(0, 0, s * 0.8, 0, Math.PI * 2);
+                ctx.closePath();
+                ctx.fill();
+                break;
+        }
+    }
+
+    drawObstacleTeleporters(ctx, cs, cx, cy) {
+        const pulse = 0.5 + 0.5 * Math.sin(this.obstacleTPGlowPhase * Math.PI * 2);
+
+        for (const tp of this.obstacleTeleporters) {
+            const tpColor = this._tpPairColor(tp.pair);
+            const x = tp.c * cs, y = tp.r * cs;
+            const pad = cs * 0.15;
+            const w = cs - pad * 2, h = cs - pad * 2;
+            const r = cs * 0.12;
+
+            ctx.save();
+            // Glow
+            ctx.shadowColor = tpColor;
+            ctx.shadowBlur = 8 + pulse * 12;
+            ctx.globalAlpha = 0.25 + pulse * 0.35;
+            ctx.fillStyle = tpColor;
+            this._roundRect(ctx, x + pad, y + pad, w, h, r);
+            ctx.fill();
+
+            // Border
+            ctx.globalAlpha = 0.6 + pulse * 0.4;
+            ctx.shadowBlur = 0;
+            ctx.strokeStyle = tpColor;
+            ctx.lineWidth = 2;
+            this._roundRect(ctx, x + pad, y + pad, w, h, r);
+            ctx.stroke();
+            ctx.restore();
+
+            // Pair icon: same icon = same pair = same destination
+            ctx.save();
+            ctx.fillStyle = this.isDarkMode ? '#fff' : '#1e293b';
+            ctx.globalAlpha = 0.9;
+            ctx.translate(cx(tp.c), cy(tp.r));
+            this._drawTPPairIcon(ctx, tp.pair, cs * 0.22);
+            ctx.restore();
         }
     }
 
     triggerWinSequence() {
         this.isWinning = true;
         if (this.currentMode === 'speedrun') this.stopSpeedrun();
+        if (this.currentMode === 'obstacles') this.stopObstacleGlow();
         const pathLines = this.userLines;
 
         this.winAnimationPoints = [];
@@ -2280,6 +2868,7 @@ class Game {
     }
 
     startCelebration() {
+        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
         if (!this.settings.confetti) return;
         this.isCelebrating = true;
         this.confettiCanvas.classList.add('active');

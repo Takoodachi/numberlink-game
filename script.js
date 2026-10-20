@@ -28,6 +28,68 @@ const analytics = getAnalytics(app);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
+// Per-mode copy for the lobby card and title, plus the static preview board.
+// board: nodes are colored endpoints; letters [r, c, ch]; walls [r, c, 'r'|'b']; tps [r, c, glyph, color]
+const MODE_INFO = {
+    classic: {
+        name: 'Number Link', tag: 'Classic', goal: 'Fill every tile', input: 'Drag · arrow keys',
+        desc: 'Connect 1 → 2 → 3… in order and fill every tile on the grid. Paths can\'t cross.',
+        board: { nodes: [
+            {r:0,c:0,cl:'#ef4444'},{r:4,c:4,cl:'#ef4444'},
+            {r:0,c:4,cl:'#2563eb'},{r:4,c:0,cl:'#2563eb'},
+            {r:2,c:1,cl:'#059669'},{r:2,c:3,cl:'#059669'},
+        ]},
+    },
+    speedrun: {
+        name: 'Speedrun', tag: 'Time attack', goal: 'Fastest solve', input: 'Drag · arrow keys',
+        desc: 'Classic rules with the clock running. Your best time on every level is saved.',
+        board: { nodes: [
+            {r:0,c:0,cl:'#d97706'},{r:3,c:4,cl:'#d97706'},
+            {r:0,c:3,cl:'#0891b2'},{r:4,c:1,cl:'#0891b2'},
+            {r:1,c:4,cl:'#db2777'},{r:4,c:4,cl:'#db2777'},
+        ]},
+    },
+    blindfold: {
+        name: 'Blindfold', tag: 'Memory', goal: 'Fill every tile', input: 'Drag · arrow keys',
+        desc: 'Every number is hidden. Connect them in order from memory; a correct link reveals both ends.',
+        board: { fog: true, nodes: [
+            {r:0,c:2,cl:'#6d28d9'},{r:4,c:2,cl:'#6d28d9'},
+            {r:1,c:0,cl:'#ef4444'},{r:3,c:4,cl:'#ef4444'},
+            {r:0,c:4,cl:'#059669'},{r:4,c:0,cl:'#059669'},
+        ]},
+    },
+    optimal: {
+        name: 'Optimal Path', tag: 'Efficiency', goal: 'Fewest tiles', input: 'Drag · arrow keys',
+        desc: 'Forget filling the grid. Link the numbers in order using as few tiles as you can.',
+        board: { nodes: [
+            {r:0,c:0,cl:'#ef4444'},{r:4,c:4,cl:'#ef4444'},
+            {r:0,c:4,cl:'#2563eb'},{r:4,c:0,cl:'#2563eb'},
+        ]},
+    },
+    obstacles: {
+        name: 'Obstacles', tag: 'Navigation', goal: 'Fill every tile', input: 'Arrow keys · WASD',
+        desc: 'Walls block your path and teleporter pairs jump it across the board. Fill every tile.',
+        board: {
+            nodes: [{r:0,c:0,cl:'#6d28d9'},{r:4,c:4,cl:'#6d28d9'}],
+            walls: [[1,1,'r'],[1,3,'b'],[3,1,'b'],[3,2,'r']],
+            tps: [[0,3,'▲','#a855f7'],[4,1,'▲','#a855f7'],[2,2,'◆','#06b6d4'],[4,3,'◆','#06b6d4']],
+        },
+    },
+    words: {
+        name: 'Connecting Letters', tag: 'Vocabulary', goal: 'Spell a word', input: 'Drag',
+        desc: 'Trace from the start letter to the end letter to spell a real word, then read its definition.',
+        board: { nodes: [
+            {r:1,c:0,cl:'#6d28d9'},{r:3,c:4,cl:'#6d28d9'},
+        ], letters: [
+            [0,0,'W'],[0,1,'O'],[0,2,'R'],[0,3,'D'],[0,4,'S'],
+            [1,1,'I'],[1,2,'N'],[1,3,'K'],[1,4,'S'],
+            [2,0,'P'],[2,1,'L'],[2,2,'A'],[2,3,'Y'],[2,4,'!'],
+            [3,0,'G'],[3,1,'A'],[3,2,'M'],[3,3,'E'],
+            [4,0,'T'],[4,1,'I'],[4,2,'M'],[4,3,'E'],[4,4,'S'],
+        ]},
+    },
+};
+
 class Game {
     constructor() {
         this.isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
@@ -35,8 +97,6 @@ class Game {
         if (this.isMobile) {
             document.body.classList.add('mobile-layout');
             document.documentElement.classList.add('mobile-layout');
-        } else {
-            document.getElementById('carousel-overlay').classList.add('hidden');
         }
 
         this.splashStartTime = Date.now();
@@ -834,6 +894,9 @@ class Game {
             }
 
             this.loadLevel(this.currentLevelIndex);
+            // Board is interactive; the 3D lobby may load now
+            this.boardReady = true;
+            this.applyLobby3D();
 
             const elapsedTime = Date.now() - this.splashStartTime;
             const remainingTime = Math.max(0, 1500 - elapsedTime);
@@ -1033,8 +1096,11 @@ class Game {
 
         const animDuration = 200;
         const startTime = performance.now();
+        const grid = this.grid;
 
         const animate = (now) => {
+            // A newer level replaced the grid; its own entrance animation takes over
+            if (this.grid !== grid) return;
             let anyActive = false;
             animCells.forEach(({ r, c }, i) => {
                 const elapsed = now - (startTime + i * staggerMs);
@@ -1160,7 +1226,8 @@ class Game {
     resizeCanvas() {
         const maxWidth = Math.min(window.innerWidth * 0.92, 600);
         const maxHeight = window.innerHeight - 220;
-        const wrapperSize = Math.floor(Math.min(maxWidth, maxHeight));
+        // Clamp: a window under ~225px tall made this negative and canvas arc() threw
+        const wrapperSize = Math.max(5, Math.floor(Math.min(maxWidth, maxHeight)));
 
         this.wrapper.style.width = `${wrapperSize}px`;
         this.wrapper.style.height = `${wrapperSize}px`;
@@ -1184,143 +1251,152 @@ class Game {
         this.draw();
     }
 
+    // Lobby: the full-screen mode picker (glass card + optional 3D street from lobby3d.js)
     initCarousel() {
         this.carouselOverlay = document.getElementById('carousel-overlay');
-        this.carouselBoards = Array.from(document.querySelectorAll('.carousel-board'));
-        this.carouselPrevBtn = document.getElementById('carousel-prev');
-        this.carouselNextBtn = document.getElementById('carousel-next');
         this.carouselModes = ['classic', 'speedrun', 'blindfold', 'optimal', 'obstacles', 'words'];
+        this.carouselIndex = Math.max(0, this.carouselModes.indexOf(this.currentMode));
+        this.lobbyScene = null;
 
-        this.carouselIndex = this.carouselModes.indexOf(this.currentMode);
-        if (this.carouselIndex === -1) this.carouselIndex = 0;
+        document.getElementById('carousel-prev').onclick = () => this.moveCarousel(-1);
+        document.getElementById('carousel-next').onclick = () => this.moveCarousel(1);
+        document.getElementById('lobby-play-btn').onclick = () => this.chooseCarouselMode(this.carouselIndex);
+        document.getElementById('lobby-close').onclick = () => this.dismissCarousel();
+        document.getElementById('lobby-profile').onclick = () => document.getElementById('auth-btn').click();
+        document.getElementById('lobby-3d-toggle').onclick = () => {
+            this.settings.lobby3d = !this.settings.lobby3d;
+            this.saveSettings();
+            this.applyLobby3D();
+        };
+        document.getElementById('lobby-rules-btn').onclick = () => {
+            const savedMode = this.currentMode;
+            this.currentMode = this.carouselModes[this.carouselIndex];
+            this.updateRulesUI();
+            this.currentMode = savedMode;
+            document.getElementById('rules-modal').classList.add('open');
+        };
 
-        // Inject mini boards and wire rules buttons
-        this.carouselBoards.forEach((board, index) => {
-            const mode = this.carouselModes[index];
-            const slot = board.querySelector('.mini-board-slot');
-            if (slot) slot.innerHTML = this.generateMiniBoardHTML(mode);
+        // Wheel and swipe move one cabinet per gesture
+        let lastStep = 0;
+        const step = (dir) => {
+            const now = Date.now();
+            if (now - lastStep < 450) return;
+            lastStep = now;
+            this.moveCarousel(dir);
+        };
+        this.carouselOverlay.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            if (Math.abs(e.deltaY) > 8) step(Math.sign(e.deltaY));
+        }, { passive: false });
 
-            const rulesBtn = board.querySelector('.carousel-card-rules-btn');
-            if (rulesBtn) {
-                rulesBtn.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    const savedMode = this.currentMode;
-                    this.currentMode = mode;
-                    this.updateRulesUI();
-                    this.currentMode = savedMode;
-                    document.getElementById('rules-modal').classList.add('open');
-                });
-            }
-        });
-
-        this.updateCarouselTransforms();
-
-        this.carouselPrevBtn.onclick = () => this.moveCarousel(-1);
-        this.carouselNextBtn.onclick = () => this.moveCarousel(1);
-
-        this.carouselBoards.forEach((board, index) => {
-            const btn = board.querySelector('.carousel-choose-btn');
-            btn.onclick = (e) => {
-                e.stopPropagation();
-                if (this.carouselIndex === index) {
-                    this.chooseCarouselMode(index);
-                } else {
-                    this.carouselIndex = index;
-                    this.updateCarouselTransforms();
-                }
-            };
-            board.onclick = () => {
-                if (this.carouselIndex !== index) {
-                    this.carouselIndex = index;
-                    this.updateCarouselTransforms();
-                }
-            };
-        });
-
-        // Dismiss overlay by clicking the dark backdrop (only after first Play!)
-        this.carouselOverlay.addEventListener('click', (e) => {
-            if (e.target === this.carouselOverlay && this.carouselCanDismiss) {
-                this.dismissCarousel();
-            }
+        let touchStart = null;
+        this.carouselOverlay.addEventListener('touchstart', (e) => {
+            touchStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        }, { passive: true });
+        this.carouselOverlay.addEventListener('touchend', (e) => {
+            if (!touchStart) return;
+            const dx = e.changedTouches[0].clientX - touchStart.x;
+            const dy = e.changedTouches[0].clientY - touchStart.y;
+            touchStart = null;
+            if (Math.max(Math.abs(dx), Math.abs(dy)) < 40) return;
+            // Swipe up or left goes forward, like scrolling down
+            step(Math.abs(dy) > Math.abs(dx) ? -Math.sign(dy) : -Math.sign(dx));
         });
 
         window.addEventListener('keydown', (e) => {
-            if (this.carouselOverlay && !this.carouselOverlay.classList.contains('hidden')) {
-                if (e.key === 'ArrowLeft') this.moveCarousel(-1);
-                if (e.key === 'ArrowRight') this.moveCarousel(1);
-                if (e.key === 'Enter') this.chooseCarouselMode(this.carouselIndex);
-                if (e.key === 'Escape' && this.carouselCanDismiss) {
-                    this.dismissCarousel();
-                }
-            }
+            if (this.carouselOverlay.classList.contains('hidden')) return;
+            if (document.querySelector('.modal-overlay.open')) return;
+            if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') this.moveCarousel(-1);
+            if (e.key === 'ArrowDown' || e.key === 'ArrowRight') this.moveCarousel(1);
+            // Enter on a focused button already fires its click
+            if (e.key === 'Enter' && !e.target.closest('button')) this.chooseCarouselMode(this.carouselIndex);
+            if (e.key === 'Escape' && this.carouselCanDismiss) this.dismissCarousel();
         });
+
+        this.renderLobby();
+        this.applyLobby3D();
     }
 
     openCarousel() {
-        this.carouselIndex = this.carouselModes.indexOf(this.currentMode);
-        if (this.carouselIndex === -1) this.carouselIndex = 0;
-
-        this.carouselBoards.forEach(board => {
-            board.classList.remove('zoom-in');
-            board.style.opacity = '';
-            board.style.pointerEvents = 'auto';
-        });
+        this.carouselIndex = Math.max(0, this.carouselModes.indexOf(this.currentMode));
         this.carouselOverlay.classList.remove('hiding', 'hidden');
-        this.updateCarouselTransforms();
+        this.renderLobby(true);
+        if (this.lobbyScene && this.lobby3dOn) this.lobbyScene.start();
+        document.getElementById('lobby-play-btn').focus();
     }
 
     dismissCarousel() {
         this.carouselOverlay.classList.add('hidden');
+        if (this.lobbyScene) this.lobbyScene.stop();
+    }
+
+    // Loads the 3D street once the board is interactive; otherwise the flat lobby stays
+    applyLobby3D() {
+        const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        const toggle = document.getElementById('lobby-3d-toggle');
+        toggle.hidden = reduced || this.lobby3dFailed;
+        toggle.textContent = this.settings.lobby3d ? '3D On' : '3D Off';
+        toggle.setAttribute('aria-pressed', String(this.settings.lobby3d));
+
+        this.lobby3dOn = this.settings.lobby3d && !reduced && !this.lobby3dFailed && !!this.lobbyScene;
+        this.carouselOverlay.classList.toggle('lobby-3d', this.lobby3dOn);
+        const visible = !this.carouselOverlay.classList.contains('hidden');
+        if (this.lobbyScene) {
+            if (this.lobby3dOn && visible) this.lobbyScene.start();
+            else this.lobbyScene.stop();
+            return;
+        }
+
+        if (!this.settings.lobby3d || reduced || this.lobby3dFailed || !this.boardReady || this.lobbyLoading) return;
+        this.lobbyLoading = true;
+        const overlayStyle = getComputedStyle(this.carouselOverlay);
+        const modes = this.carouselModes.map(key => ({
+            key,
+            name: MODE_INFO[key].name,
+            board: MODE_INFO[key].board,
+            accent: overlayStyle.getPropertyValue(`--m-${key}`).trim(),
+            accent2: overlayStyle.getPropertyValue(`--m-${key}-2`).trim(),
+        }));
+        import('./lobby3d.js')
+            .then(m => m.createLobbyScene(document.getElementById('lobby-canvas'), modes))
+            .then(scene => {
+                this.lobbyScene = scene;
+                scene.goTo(this.carouselIndex, true);
+            })
+            .catch(err => {
+                // No WebGL, or Three.js could not load (offline)
+                console.warn('3D lobby unavailable, using the flat lobby:', err);
+                this.lobby3dFailed = true;
+            })
+            .finally(() => {
+                this.lobbyLoading = false;
+                this.applyLobby3D();
+            });
     }
 
     generateMiniBoardHTML(mode) {
         const S = 5;
-        const cfgs = {
-            classic: { nodes: [
-                {r:0,c:0,cl:'#ef4444'},{r:4,c:4,cl:'#ef4444'},
-                {r:0,c:4,cl:'#2563eb'},{r:4,c:0,cl:'#2563eb'},
-                {r:2,c:1,cl:'#059669'},{r:2,c:3,cl:'#059669'},
-            ]},
-            speedrun: { nodes: [
-                {r:0,c:0,cl:'#d97706'},{r:3,c:4,cl:'#d97706'},
-                {r:0,c:3,cl:'#0891b2'},{r:4,c:1,cl:'#0891b2'},
-                {r:1,c:4,cl:'#db2777'},{r:4,c:4,cl:'#db2777'},
-            ]},
-            blindfold: { fog: true, nodes: [
-                {r:0,c:2,cl:'#6d28d9'},{r:4,c:2,cl:'#6d28d9'},
-                {r:1,c:0,cl:'#ef4444'},{r:3,c:4,cl:'#ef4444'},
-                {r:0,c:4,cl:'#059669'},{r:4,c:0,cl:'#059669'},
-            ]},
-            optimal: { nodes: [
-                {r:0,c:0,cl:'#ef4444'},{r:4,c:4,cl:'#ef4444'},
-                {r:0,c:4,cl:'#2563eb'},{r:4,c:0,cl:'#2563eb'},
-            ]},
-            words: { nodes: [
-                {r:1,c:0,cl:'#6d28d9'},{r:3,c:4,cl:'#6d28d9'},
-            ], letters: [
-                [0,0,'W'],[0,1,'O'],[0,2,'R'],[0,3,'D'],[0,4,'S'],
-                [1,1,'I'],[1,2,'N'],[1,3,'K'],[1,4,'S'],
-                [2,0,'P'],[2,1,'L'],[2,2,'A'],[2,3,'Y'],[2,4,'!'],
-                [3,0,'G'],[3,1,'A'],[3,2,'M'],[3,3,'E'],
-                [4,0,'T'],[4,1,'I'],[4,2,'M'],[4,3,'E'],[4,4,'S'],
-            ]},
-        };
-        const cfg = cfgs[mode] || cfgs.classic;
+        const cfg = MODE_INFO[mode].board;
         const nodeMap = new Map(cfg.nodes.map(n => [`${n.r},${n.c}`, n.cl]));
-        const letterMap = cfg.letters
-            ? new Map(cfg.letters.map(([r, c, l]) => [`${r},${c}`, l]))
-            : new Map();
+        const letterMap = new Map((cfg.letters || []).map(([r, c, l]) => [`${r},${c}`, l]));
+        const tpMap = new Map((cfg.tps || []).map(([r, c, g, cl]) => [`${r},${c}`, [g, cl]]));
+        const wallCls = {};
+        (cfg.walls || []).forEach(([r, c, side]) => { wallCls[`${r},${c}`] = (wallCls[`${r},${c}`] || '') + ` mb-wall-${side}`; });
         const fogCls = cfg.fog ? ' mini-board-blindfold' : '';
-        let html = `<div class="mini-board mini-board-${mode}${fogCls}">`;
+        let html = `<div class="mini-board mini-board-${mode}${fogCls}" aria-hidden="true">`;
         for (let r = 0; r < S; r++) {
             for (let c = 0; c < S; c++) {
                 const key = `${r},${c}`;
+                const cls = `mb-cell${wallCls[key] || ''}`;
                 if (nodeMap.has(key)) {
-                    html += `<div class="mb-cell"><div class="mb-node" style="background:${nodeMap.get(key)}"></div></div>`;
+                    html += `<div class="${cls}"><div class="mb-node" style="background:${nodeMap.get(key)}"></div></div>`;
                 } else if (letterMap.has(key)) {
-                    html += `<div class="mb-cell mb-letter">${letterMap.get(key)}</div>`;
+                    html += `<div class="${cls} mb-letter">${letterMap.get(key)}</div>`;
+                } else if (tpMap.has(key)) {
+                    const [glyph, color] = tpMap.get(key);
+                    html += `<div class="${cls} mb-tp" style="color:${color}">${glyph}</div>`;
                 } else {
-                    html += `<div class="mb-cell"></div>`;
+                    html += `<div class="${cls}"></div>`;
                 }
             }
         }
@@ -1329,55 +1405,47 @@ class Game {
     }
 
     moveCarousel(dir) {
-        this.carouselIndex += dir;
-        if (this.carouselIndex < 0) this.carouselIndex = this.carouselBoards.length - 1;
-        if (this.carouselIndex >= this.carouselBoards.length) this.carouselIndex = 0;
-        this.updateCarouselTransforms();
+        const n = this.carouselModes.length;
+        this.carouselIndex = (this.carouselIndex + dir + n) % n;
+        this.renderLobby();
     }
 
-    updateCarouselTransforms() {
-        this.carouselBoards.forEach((board, index) => {
-            let diff = index - this.carouselIndex;
-            
-            // Handle wrap-around for smooth 3D effect
-            if (diff > this.carouselBoards.length / 2) diff -= this.carouselBoards.length;
-            if (diff < -this.carouselBoards.length / 2) diff += this.carouselBoards.length;
+    // Fills the card for the focused mode and moves the 3D camera to its cabinet
+    renderLobby(instant = false) {
+        const i = this.carouselIndex;
+        const mode = this.carouselModes[i];
+        const info = MODE_INFO[mode];
+        const level = mode === 'words' ? this.maxUnlockedWordIndex
+                    : mode === 'obstacles' ? this.maxUnlockedObstacleIndex
+                    : this.maxUnlockedIndex;
+        const pad = (n) => String(n).padStart(2, '0');
 
-            board.classList.remove('center');
-
-            if (diff === 0) {
-                board.style.transform = `translateX(0) translateZ(0) rotateY(0)`;
-                board.style.opacity = 1;
-                board.style.zIndex = 10;
-                board.classList.add('center');
-            } else {
-                const sign = Math.sign(diff);
-                const absDiff = Math.abs(diff);
-                
-                // Adjust translation and rotation based on distance
-                const tx = sign * (160 + absDiff * 60);
-                const tz = -absDiff * 150;
-                const ry = -sign * 25;
-                
-                board.style.transform = `translateX(${tx}px) translateZ(${tz}px) rotateY(${ry}deg) scale(${1 - absDiff * 0.1})`;
-                board.style.opacity = 1 - absDiff * 0.3;
-                board.style.zIndex = 10 - absDiff;
-            }
-        });
+        this.carouselOverlay.dataset.mode = mode;
+        // Even-index cabinets stand on the right of the street, so the card goes left
+        this.carouselOverlay.dataset.side = i % 2 === 0 ? 'left' : 'right';
+        document.getElementById('lobby-eyebrow').textContent = `Mode ${pad(i + 1)} / ${pad(this.carouselModes.length)}`;
+        document.getElementById('lobby-tag').textContent = info.tag;
+        document.getElementById('lobby-title').textContent = info.name;
+        document.getElementById('lobby-desc').textContent = info.desc;
+        document.getElementById('lobby-goal').textContent = info.goal;
+        document.getElementById('lobby-input').textContent = info.input;
+        document.getElementById('lobby-progress').textContent = `Level ${(level || 0) + 1}`;
+        document.getElementById('lobby-preview').innerHTML = this.generateMiniBoardHTML(mode);
+        document.getElementById('lobby-close').hidden = !this.carouselCanDismiss;
+        if (this.lobbyScene) this.lobbyScene.goTo(i, instant);
     }
 
     chooseCarouselMode(index) {
-        const board = this.carouselBoards[index];
+        if (this.carouselOverlay.classList.contains('hiding')) return;
         this.carouselCanDismiss = true;
         this.carouselOverlay.classList.add('hiding');
-        board.classList.add('zoom-in');
-        board.style.pointerEvents = 'none';
+        if (this.lobbyScene && this.lobby3dOn) this.lobbyScene.zoomIn();
 
         setTimeout(() => {
             this.carouselOverlay.classList.remove('hiding');
-            this.carouselOverlay.classList.add('hidden');
+            this.dismissCarousel();
             this.setGameMode(this.carouselModes[index]);
-        }, 600);
+        }, this.lobby3dOn ? 450 : 150);
     }
 
     setGameMode(mode, isInitialLoad = false) {
@@ -1393,11 +1461,7 @@ class Game {
 
         this.updateRulesUI();
 
-        let displayMode = mode === 'classic' ? 'Number Link' :
-            mode === 'optimal' ? 'Optimal Path' :
-                mode === 'words' ? 'Connecting Letters' :
-                    mode === 'obstacles' ? 'Obstacles' :
-                        mode.charAt(0).toUpperCase() + mode.slice(1);
+        const displayMode = MODE_INFO[mode].name;
 
         const mainTitle = document.getElementById('main-game-title');
         if (mainTitle) {
@@ -1434,9 +1498,8 @@ class Game {
         this.currentMode = null;
         this.setGameMode(targetMode, true);
         if (this.carouselOverlay && !this.carouselOverlay.classList.contains('hidden')) {
-            this.carouselIndex = this.carouselModes.indexOf(targetMode);
-            if (this.carouselIndex === -1) this.carouselIndex = 0;
-            this.updateCarouselTransforms();
+            this.carouselIndex = Math.max(0, this.carouselModes.indexOf(targetMode));
+            this.renderLobby(true);
         }
     }
 
@@ -2974,7 +3037,7 @@ class Game {
 
     // Settings Methods
     loadSettings() {
-        const defaults = { toasts: true, confetti: true, cursorTrail: true };
+        const defaults = { toasts: true, confetti: true, cursorTrail: true, lobby3d: true };
         try {
             const saved = JSON.parse(localStorage.getItem('gameSettings') || '{}');
             return { ...defaults, ...saved };

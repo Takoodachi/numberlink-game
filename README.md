@@ -14,9 +14,9 @@ A high-fidelity, responsive HTML5 and Native Android implementation of the class
 ## ✨ Features
 
 ### Premium UI & Aesthetics
-* **High-Fidelity Landing Page:** A modernized entry experience featuring a dynamic "snake-like" interactive background where colored grid boxes follow the cursor in a chain.
-* **3D Perspective Carousel:** An immersive 3D carousel for selecting game modes, complete with click-to-select side cards, intuitive visual indicators, and seamless transitions into the game.
-* **Modern Design Language:** Utilizes the "Outfit" typography, sleek glassmorphism effects for modals and sidebars, smooth dynamic gradients, and polished micro-animations for buttons and interactive elements.
+* **3D Arcade Lobby:** Pick a mode by walking a neon night street built with Three.js: one arcade cabinet per mode, each showing a preview board, with a glass info card and a camera that dives into the screen when you press Play. Navigate with the ↑/↓ buttons, arrow keys, the mouse wheel, or a swipe.
+* **3D Off Fallback:** A "3D" toggle (and `prefers-reduced-motion`, missing WebGL, or being offline) switches to a flat lobby with the same card and a 2D preview board, so the game always works.
+* **Night-Arcade Design Language:** Orbitron display titles, Space Mono labels and HUD, Outfit body text, frosted-glass panels, and a neon accent color per game mode.
 * **Themes:** Built-in Dark Mode 🌙 and Light Mode ☀️ toggled via a professional Floating Action Button (FAB), complete with custom-themed scrollbars and dynamic favicons.
 
 ### Gameplay & Mechanics

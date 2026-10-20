@@ -43,61 +43,36 @@
 
     <button id="theme-toggle" title="Toggle Dark Mode">🌙</button>
 
-    <div id="carousel-overlay" class="carousel-overlay">
-        <div class="carousel-container">
-            <div class="carousel-board" data-mode="classic">
-                <div class="carousel-card-header">
-                    <span class="carousel-mode-label">Number Link</span>
-                    <button class="carousel-card-rules-btn">i</button>
-                </div>
-                <div class="mini-board-slot"></div>
-                <button class="game-btn btn-primary carousel-choose-btn">Play!</button>
-            </div>
-            <div class="carousel-board" data-mode="speedrun">
-                <div class="carousel-card-header">
-                    <span class="carousel-mode-label">Speedrun</span>
-                    <button class="carousel-card-rules-btn">i</button>
-                </div>
-                <div class="mini-board-slot"></div>
-                <button class="game-btn btn-primary carousel-choose-btn">Play!</button>
-            </div>
-            <div class="carousel-board" data-mode="blindfold">
-                <div class="carousel-card-header">
-                    <span class="carousel-mode-label">Blindfold</span>
-                    <button class="carousel-card-rules-btn">i</button>
-                </div>
-                <div class="mini-board-slot"></div>
-                <button class="game-btn btn-primary carousel-choose-btn">Play!</button>
-            </div>
-            <div class="carousel-board" data-mode="optimal">
-                <div class="carousel-card-header">
-                    <span class="carousel-mode-label">Optimal Path</span>
-                    <button class="carousel-card-rules-btn">i</button>
-                </div>
-                <div class="mini-board-slot"></div>
-                <button class="game-btn btn-primary carousel-choose-btn">Play!</button>
-            </div>
-            <div class="carousel-board" data-mode="obstacles">
-                <div class="carousel-card-header">
-                    <span class="carousel-mode-label">Obstacles</span>
-                    <button class="carousel-card-rules-btn">i</button>
-                </div>
-                <div class="mini-board-slot"></div>
-                <button class="game-btn btn-primary carousel-choose-btn">Play!</button>
-            </div>
-            <div class="carousel-board" data-mode="words">
-                <div class="carousel-card-header">
-                    <span class="carousel-mode-label">Connecting Letters</span>
-                    <button class="carousel-card-rules-btn">i</button>
-                </div>
-                <div class="mini-board-slot"></div>
-                <button class="game-btn btn-primary carousel-choose-btn">Play!</button>
+    <div id="carousel-overlay" class="carousel-overlay lobby" data-mode="classic" role="dialog" aria-modal="true" aria-label="Choose a game mode">
+        <canvas id="lobby-canvas" aria-hidden="true"></canvas>
+        <div class="lobby-bar">
+            <div class="lobby-logo">NUMBER LINK<small>Six modes · One board</small></div>
+            <div class="lobby-pills">
+                <button id="lobby-close" class="lobby-pill" hidden>Back to game</button>
+                <button id="lobby-3d-toggle" class="lobby-pill" aria-pressed="true">3D On</button>
+                <button id="lobby-profile" class="lobby-pill">Profile</button>
             </div>
         </div>
-        <div class="carousel-nav">
-            <button id="carousel-prev" class="game-btn btn-secondary">◀</button>
-            <button id="carousel-next" class="game-btn btn-secondary">▶</button>
-        </div>
+        <section class="lobby-card">
+            <div class="lobby-card-top">
+                <span class="lobby-eyebrow" id="lobby-eyebrow">Mode 01 / 06</span>
+                <span class="lobby-tag" id="lobby-tag">Classic</span>
+                <button id="lobby-rules-btn" class="lobby-rules-btn" aria-label="How to play this mode">i</button>
+            </div>
+            <h2 class="lobby-title" id="lobby-title" aria-live="polite">Number Link</h2>
+            <div class="lobby-preview" id="lobby-preview"></div>
+            <p class="lobby-desc" id="lobby-desc"></p>
+            <dl class="lobby-specs">
+                <dt>Goal</dt><dd id="lobby-goal"></dd>
+                <dt>Input</dt><dd id="lobby-input"></dd>
+                <dt>Progress</dt><dd id="lobby-progress"></dd>
+            </dl>
+            <div class="lobby-actions">
+                <button id="carousel-prev" class="lobby-round" aria-label="Previous mode">↑</button>
+                <button id="lobby-play-btn" class="game-btn btn-primary lobby-play-btn">Play →</button>
+                <button id="carousel-next" class="lobby-round" aria-label="Next mode">↓</button>
+            </div>
+        </section>
     </div>
 
     <div id="word-def-sidebar">
@@ -291,90 +266,6 @@
 
     <button id="auth-btn" class="game-btn btn-secondary auth-global"></button>
 
-    <div id="landing-page">
-
-        <section id="hero-section">
-            <div class="hero-bg-grid"></div>
-            <canvas id="hero-canvas"></canvas>
-            <div class="hero-content">
-                <h1 class="hero-title">NUMBER<br>LINK</h1>
-                <p class="hero-tagline">Six modes. One board. Infinite challenge.</p>
-                <div class="hero-ctas">
-                    <button class="hero-play-btn" id="hero-play-btn">Play Now</button>
-                    <button class="hero-scroll-btn" id="hero-scroll-btn">See Modes ↓</button>
-                </div>
-            </div>
-        </section>
-
-        <section id="modes-section" class="section-alt">
-            <div class="modes-inner">
-                <h2 class="section-heading">Choose Your Challenge</h2>
-                <div class="modes-grid">
-                    <div class="mode-card" data-mode="classic">
-                        <span class="mode-card-icon">🔢</span>
-                        <h3 class="mode-card-name">Classic</h3>
-                        <p class="mode-card-desc">Connect 1→2→3… to fill every tile on the grid.</p>
-                        <button class="mode-card-play-btn">Play</button>
-                    </div>
-                    <div class="mode-card" data-mode="speedrun">
-                        <span class="mode-card-icon">⚡</span>
-                        <h3 class="mode-card-name">Speedrun</h3>
-                        <p class="mode-card-desc">Race the clock. Chase the leaderboard.</p>
-                        <button class="mode-card-play-btn">Play</button>
-                    </div>
-                    <div class="mode-card" data-mode="blindfold">
-                        <span class="mode-card-icon">🙈</span>
-                        <h3 class="mode-card-name">Blindfold</h3>
-                        <p class="mode-card-desc">Numbers are hidden. Trust your memory.</p>
-                        <button class="mode-card-play-btn">Play</button>
-                    </div>
-                    <div class="mode-card" data-mode="optimal">
-                        <span class="mode-card-icon">📐</span>
-                        <h3 class="mode-card-name">Optimal Path</h3>
-                        <p class="mode-card-desc">Solve it. Then solve it in fewer tiles.</p>
-                        <button class="mode-card-play-btn">Play</button>
-                    </div>
-                    <div class="mode-card" data-mode="obstacles">
-                        <span class="mode-card-icon">🧱</span>
-                        <h3 class="mode-card-name">Obstacles</h3>
-                        <p class="mode-card-desc">Navigate walls and teleporters to fill the grid.</p>
-                        <button class="mode-card-play-btn">Play</button>
-                    </div>
-                    <div class="mode-card" data-mode="words">
-                        <span class="mode-card-icon">🔤</span>
-                        <h3 class="mode-card-name">Connecting Letters</h3>
-                        <p class="mode-card-desc">Spell words by linking letters across the grid.</p>
-                        <button class="mode-card-play-btn">Play</button>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <section id="howtoplay-section">
-            <h2 class="section-heading">How It Works</h2>
-            <div class="steps-row">
-                <div class="step-card">
-                    <span class="step-number">01</span>
-                    <h3 class="step-title">Pick a Mode</h3>
-                    <p class="step-desc">Six distinct challenges, from speed runs to memory tests. Start with Classic.</p>
-                </div>
-                <div class="step-card">
-                    <span class="step-number">02</span>
-                    <h3 class="step-title">Draw Connections</h3>
-                    <p class="step-desc">Drag across the board to link numbers in order. Paths can't cross.</p>
-                </div>
-                <div class="step-card">
-                    <span class="step-number">03</span>
-                    <h3 class="step-title">Fill the Grid</h3>
-                    <p class="step-desc">Every tile must be covered. Solve the puzzle and the board lights up.</p>
-                </div>
-            </div>
-            <div class="howtoplay-cta">
-                <button id="howtoplay-play-btn" class="hero-play-btn">Start Playing</button>
-            </div>
-        </section>
-    </div>
-
     <div id="game-section">
         <button id="level-panel-btn" class="game-btn btn-secondary leaderboard-top-left" title="Browse Levels">☰ Levels</button>
         <header>
@@ -412,10 +303,6 @@
     <div id="contact-corner" class="contact-corner"></div>
     <canvas id="confetti-canvas"></canvas>
     <script type="module" src="script.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollToPlugin.min.js"></script>
-    <script src="landing.js"></script>
 </body>
 
 </html>

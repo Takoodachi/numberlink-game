@@ -28,8 +28,15 @@ const analytics = getAnalytics(app);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
+// Back-and-forth path through every cell of the 5x5 preview board
+const SNAKE = Array.from({ length: 25 }, (_, i) => {
+    const r = Math.floor(i / 5), c = i % 5;
+    return [r, r % 2 ? 4 - c : c];
+});
+
 // Per-mode copy for the lobby card and title, plus the static preview board.
-// board: nodes are colored endpoints; letters [r, c, ch]; walls [r, c, 'r'|'b']; tps [r, c, glyph, color]
+// board: nodes are colored endpoints; letters [r, c, ch]; walls [r, c, 'r'|'b']; tps [r, c, glyph, color];
+// demo is the path the 3D cabinet screen draws on loop (null = teleport jump), demoMs its draw time
 const MODE_INFO = {
     classic: {
         name: 'Number Link', tag: 'Classic', goal: 'Fill every tile', input: 'Drag · arrow keys',
@@ -38,7 +45,7 @@ const MODE_INFO = {
             {r:0,c:0,cl:'#ef4444'},{r:4,c:4,cl:'#ef4444'},
             {r:0,c:4,cl:'#2563eb'},{r:4,c:0,cl:'#2563eb'},
             {r:2,c:1,cl:'#059669'},{r:2,c:3,cl:'#059669'},
-        ]},
+        ], demo: SNAKE, demoMs: 3600 },
     },
     speedrun: {
         name: 'Speedrun', tag: 'Time attack', goal: 'Fastest solve', input: 'Drag · arrow keys',
@@ -47,7 +54,7 @@ const MODE_INFO = {
             {r:0,c:0,cl:'#d97706'},{r:3,c:4,cl:'#d97706'},
             {r:0,c:3,cl:'#0891b2'},{r:4,c:1,cl:'#0891b2'},
             {r:1,c:4,cl:'#db2777'},{r:4,c:4,cl:'#db2777'},
-        ]},
+        ], demo: SNAKE, demoMs: 1500 },
     },
     blindfold: {
         name: 'Blindfold', tag: 'Memory', goal: 'Fill every tile', input: 'Drag · arrow keys',
@@ -56,7 +63,7 @@ const MODE_INFO = {
             {r:0,c:2,cl:'#6d28d9'},{r:4,c:2,cl:'#6d28d9'},
             {r:1,c:0,cl:'#ef4444'},{r:3,c:4,cl:'#ef4444'},
             {r:0,c:4,cl:'#059669'},{r:4,c:0,cl:'#059669'},
-        ]},
+        ], demo: SNAKE, demoMs: 4200 },
     },
     optimal: {
         name: 'Optimal Path', tag: 'Efficiency', goal: 'Fewest tiles', input: 'Drag · arrow keys',
@@ -64,7 +71,7 @@ const MODE_INFO = {
         board: { nodes: [
             {r:0,c:0,cl:'#ef4444'},{r:4,c:4,cl:'#ef4444'},
             {r:0,c:4,cl:'#2563eb'},{r:4,c:0,cl:'#2563eb'},
-        ]},
+        ], demo: [[0,0],[0,1],[0,2],[0,3],[0,4],[1,4],[2,4],[3,4],[4,4]], demoMs: 2200 },
     },
     obstacles: {
         name: 'Obstacles', tag: 'Navigation', goal: 'Fill every tile', input: 'Arrow keys · WASD',
@@ -73,6 +80,7 @@ const MODE_INFO = {
             nodes: [{r:0,c:0,cl:'#6d28d9'},{r:4,c:4,cl:'#6d28d9'}],
             walls: [[1,1,'r'],[1,3,'b'],[3,1,'b'],[3,2,'r']],
             tps: [[0,3,'▲','#a855f7'],[4,1,'▲','#a855f7'],[2,2,'◆','#06b6d4'],[4,3,'◆','#06b6d4']],
+            demo: [[0,0],[1,0],[2,0],[3,0],[4,0],[4,1],null,[0,3],[0,4],[1,4],[2,4],[3,4],[4,4]], demoMs: 3200,
         },
     },
     words: {
@@ -86,7 +94,7 @@ const MODE_INFO = {
             [2,0,'P'],[2,1,'L'],[2,2,'A'],[2,3,'Y'],[2,4,'!'],
             [3,0,'G'],[3,1,'A'],[3,2,'M'],[3,3,'E'],
             [4,0,'T'],[4,1,'I'],[4,2,'M'],[4,3,'E'],[4,4,'S'],
-        ]},
+        ], demo: [[1,0],[2,0],[2,1],[2,2],[2,3],[2,4],[3,4]], demoMs: 2400 },
     },
 };
 

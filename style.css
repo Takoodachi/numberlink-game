@@ -1859,6 +1859,27 @@ body:not(.mobile-layout) {
     background: radial-gradient(ellipse 70% 45% at 50% 0%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 70%), var(--bg-color);
     box-sizing: border-box;
     position: relative;
+    /* own stacking context so the floor below paints over this background but under the board */
+    z-index: 0;
+}
+
+/* Static neon grid floor fading into the distance, echoing the lobby street. Never animated: the board stays calm */
+#game-section::before {
+    content: '';
+    position: fixed;
+    left: -40%;
+    right: -40%;
+    bottom: 0;
+    height: 55vh;
+    background:
+        linear-gradient(color-mix(in srgb, var(--accent) 40%, transparent) 2px, transparent 2px) 0 0 / 72px 72px,
+        linear-gradient(90deg, color-mix(in srgb, var(--accent) 40%, transparent) 2px, transparent 2px) 0 0 / 72px 72px;
+    transform: perspective(500px) rotateX(62deg);
+    transform-origin: 50% 100%;
+    -webkit-mask-image: linear-gradient(to top, #000 0%, transparent 90%);
+    mask-image: linear-gradient(to top, #000 0%, transparent 90%);
+    pointer-events: none;
+    z-index: -1;
 }
 
 /* On mobile, game-section behaves like the old body: full viewport */

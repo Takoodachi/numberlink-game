@@ -23,7 +23,17 @@
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Outfit:wght@400;600;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 
     <!-- Bump ?v= on both style.css and script.js whenever CSS or JS changes, so browsers skip stale caches -->
-    <link rel="stylesheet" href="style.css?v=3">
+    <link rel="stylesheet" href="style.css?v=4">
+
+    <!-- Three.js for the 3D lobby (lobby3d.js), pinned; addons import from the bare "three" name -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.min.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+            }
+        }
+    </script>
 </head>
 
 <body>
@@ -303,7 +313,7 @@
 
     <div id="contact-corner" class="contact-corner"></div>
     <canvas id="confetti-canvas"></canvas>
-    <script type="module" src="script.js?v=3"></script>
+    <script type="module" src="script.js?v=4"></script>
 </body>
 
 </html>

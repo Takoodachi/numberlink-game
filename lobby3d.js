@@ -92,9 +92,11 @@ export async function createLobbyScene(canvas, modes) {
         // Wide screens keep the camera centered so the cabinet sits beside the card;
         // narrow screens frame the cabinet above the bottom card
         const narrow = camera.aspect < 0.9;
+        // Less-wide screens (e.g. 4:3) slide toward the cabinet so it isn't cut off at the edge
+        const shift = narrow ? 0.9 : THREE.MathUtils.clamp((1.8 - camera.aspect) * 0.6, 0, 0.45);
         const drift = Math.sin(time * 0.4) * 0.06 + pointer.sx * 0.35;
-        const cam = [narrow ? x * 0.9 + drift : drift, (narrow ? 1.6 : 1.75) - pointer.sy * 0.15, z + (narrow ? 7 : 5.6)];
-        const look = [narrow ? x : 0, narrow ? 0.65 : 1.45, z];
+        const cam = [x * shift + drift, (narrow ? 1.6 : 1.75) - pointer.sy * 0.15, z + (narrow ? 7 : 5.6)];
+        const look = [narrow ? x : x * shift, narrow ? 0.65 : 1.45, z];
 
         if (zoom > 0.001) {
             // Point straight at the screen face of the nearest cabinet

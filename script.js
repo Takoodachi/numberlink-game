@@ -28,6 +28,9 @@ const analytics = getAnalytics(app);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
+// This module's ?v= (set in index.html); appended to level data and lobby3d.js so a version bump refreshes them
+const ASSET_VERSION = new URL(import.meta.url).search;
+
 // Back-and-forth path through every cell of the 5x5 preview board
 const SNAKE = Array.from({ length: 25 }, (_, i) => {
     const r = Math.floor(i / 5), c = i % 5;
@@ -889,7 +892,7 @@ class Game {
 
     async fetchLevels() {
         try {
-            const response = await fetch('levels.enc');
+            const response = await fetch('levels.enc' + ASSET_VERSION);
             if (!response.ok) throw new Error("Could not load levels");
 
             const encodedText = await response.text();
@@ -929,7 +932,7 @@ class Game {
 
     async fetchWordLevels() {
         try {
-            const response = await fetch('word_levels.enc');
+            const response = await fetch('word_levels.enc' + ASSET_VERSION);
             const encodedText = await response.text();
 
             const cleanText = encodedText.replace(/\s+/g, '');
@@ -945,7 +948,7 @@ class Game {
 
     async fetchObstacleLevels() {
         try {
-            const response = await fetch('obstacles.enc');
+            const response = await fetch('obstacles.enc' + ASSET_VERSION);
             const encodedText = await response.text();
             this.obstacleLevels = JSON.parse(atob(encodedText.replace(/\s+/g, '')));
             if (this.currentMode === 'obstacles') {
@@ -1365,8 +1368,7 @@ class Game {
             accent: overlayStyle.getPropertyValue(`--m-${key}`).trim(),
             accent2: overlayStyle.getPropertyValue(`--m-${key}-2`).trim(),
         }));
-        // Reuse this script's ?v= so lobby3d.js is cache-busted with it
-        import('./lobby3d.js' + new URL(import.meta.url).search)
+        import('./lobby3d.js' + ASSET_VERSION)
             .then(m => m.createLobbyScene(document.getElementById('lobby-canvas'), modes))
             .then(scene => {
                 this.lobbyScene = scene;
@@ -1392,20 +1394,26 @@ class Game {
         const wallCls = {};
         (cfg.walls || []).forEach(([r, c, side]) => { wallCls[`${r},${c}`] = (wallCls[`${r},${c}`] || '') + ` mb-wall-${side}`; });
         const fogCls = cfg.fog ? ' mini-board-blindfold' : '';
-        let html = `<div class="mini-board mini-board-${mode}${fogCls}" aria-hidden="true">`;
+        // Demo path under the cells (drawn by CSS in the 2D lobby); null entries are teleport jumps
+        const demo = cfg.demo || [];
+        const d = demo.map((p, k) => (p ? `${demo[k - 1] ? 'L' : 'M'}${p[1] + 0.5} ${p[0] + 0.5}` : '')).join(' ');
+        let html = `<div class="mini-board mini-board-${mode}${fogCls}" aria-hidden="true">`
+            + `<svg class="mb-svg" viewBox="0 0 ${S} ${S}"><path class="mb-path" d="${d}" pathLength="1" style="--demo-ms:${cfg.demoMs || 2500}ms"/></svg>`;
         for (let r = 0; r < S; r++) {
             for (let c = 0; c < S; c++) {
                 const key = `${r},${c}`;
                 const cls = `mb-cell${wallCls[key] || ''}`;
+                // --i staggers the pop-in animation cell by cell
+                const i = `--i:${r * S + c}`;
                 if (nodeMap.has(key)) {
-                    html += `<div class="${cls}"><div class="mb-node" style="background:${nodeMap.get(key)}"></div></div>`;
+                    html += `<div class="${cls}" style="${i}"><div class="mb-node" style="background:${nodeMap.get(key)}"></div></div>`;
                 } else if (letterMap.has(key)) {
-                    html += `<div class="${cls} mb-letter">${letterMap.get(key)}</div>`;
+                    html += `<div class="${cls} mb-letter" style="${i}">${letterMap.get(key)}</div>`;
                 } else if (tpMap.has(key)) {
                     const [glyph, color] = tpMap.get(key);
-                    html += `<div class="${cls} mb-tp" style="color:${color}">${glyph}</div>`;
+                    html += `<div class="${cls} mb-tp" style="${i};color:${color}">${glyph}</div>`;
                 } else {
-                    html += `<div class="${cls}"></div>`;
+                    html += `<div class="${cls}" style="${i}"></div>`;
                 }
             }
         }
@@ -1416,6 +1424,7 @@ class Game {
     moveCarousel(dir) {
         const n = this.carouselModes.length;
         this.carouselIndex = (this.carouselIndex + dir + n) % n;
+        this.lobbyDir = dir;
         this.renderLobby();
     }
 
@@ -1442,6 +1451,17 @@ class Game {
         document.getElementById('lobby-preview').innerHTML = this.generateMiniBoardHTML(mode);
         document.getElementById('lobby-close').hidden = !this.carouselCanDismiss;
         if (this.lobbyScene) this.lobbyScene.goTo(i, instant);
+
+        // 2D lobby: replay the card and grid "step" animations in the direction of travel
+        if (!this.lobby3dOn && !instant) {
+            const card = this.carouselOverlay.querySelector('.lobby-card');
+            const step = this.lobbyDir < 0 ? 'prev' : 'next';
+            for (const el of [card, this.carouselOverlay]) {
+                el.classList.remove('lobby-step-next', 'lobby-step-prev');
+                void el.offsetWidth; // restart the CSS animation
+                el.classList.add(`lobby-step-${step}`);
+            }
+        }
     }
 
     chooseCarouselMode(index) {
@@ -1454,7 +1474,7 @@ class Game {
             this.carouselOverlay.classList.remove('hiding');
             this.dismissCarousel();
             this.setGameMode(this.carouselModes[index]);
-        }, this.lobby3dOn ? 450 : 150);
+        }, this.lobby3dOn ? 450 : 300);
     }
 
     setGameMode(mode, isInitialLoad = false) {

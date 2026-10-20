@@ -1,6 +1,8 @@
 // generate_obstacles.js
 // Usage: node generate_obstacles.js
-// Outputs: obstacles.enc (base64-encoded JSON array of 50 levels)
+// Outputs: obstacles.enc (base64-encoded JSON array of levels)
+// Levels already in obstacles.enc are kept (by id) so saved progress still points at the same boards;
+// only schedule ids missing from the file are generated. Delete obstacles.enc to rebuild every level.
 
 const fs = require('fs');
 
@@ -271,6 +273,9 @@ function tryGenerateLevel(id, size, numWalls, numTelePairs, numNodes) {
 
     const path = hamiltonianDFS(size, emptyWallSet, tpMap, startR, startC);
     if (!path) return null;
+    // A path ending on a teleporter pushes the last clue off the final cell, so the stored solution
+    // no longer matches the clues (hints then point past the last number)
+    if (tpMap[cellKey(path[path.length - 1].r, path[path.length - 1].c)]) return null;
 
     // Place walls
     const walls = placeWalls(size, path, teleporters, numWalls);
@@ -400,19 +405,105 @@ const LEVEL_CONFIGS = [
     [48, 7, 8, 2, 7],
     [49, 7, 12, 2, 7],
     [50, 7, 11, 2, 7],  // hardest: big grid, many walls, 2 TPs, sparse clues
+
+    // 6×6 — expert: three teleporter pairs
+    [51, 6, 8, 3, 8],
+    [52, 6, 10, 3, 7],
+    [53, 6, 12, 2, 6],
+    [54, 6, 9, 3, 6],
+    [55, 6, 13, 3, 5],
+
+    // 7×7 — expert
+    [56, 7, 10, 3, 11],
+    [57, 7, 12, 3, 10],
+    [58, 7, 14, 2, 9],
+    [59, 7, 11, 3, 9],
+    [60, 7, 15, 3, 8],
+    [61, 7, 13, 3, 8],
+    [62, 7, 16, 2, 7],
+    [63, 7, 12, 3, 7],
+    [64, 7, 17, 3, 7],
+    [65, 7, 14, 3, 6],
+
+    // 8×8 (64 cells): dense=16, medium=12, sparse=9-10
+    [66, 8, 6, 1, 16],  // gentle 8×8 intro
+    [67, 8, 8, 2, 15],
+    [68, 8, 10, 2, 14],
+    [69, 8, 9, 3, 14],
+    [70, 8, 12, 2, 13],
+    [71, 8, 11, 3, 13],
+    [72, 8, 14, 2, 12],
+    [73, 8, 12, 3, 12],
+    [74, 8, 15, 3, 12],
+    [75, 8, 13, 3, 11],
+    [76, 8, 16, 2, 11],
+    [77, 8, 14, 3, 11],
+    [78, 8, 17, 3, 10],
+    [79, 8, 15, 3, 10],
+    [80, 8, 18, 3, 10],
+    [81, 8, 16, 3, 10],
+    [82, 8, 19, 2, 9],
+    [83, 8, 17, 3, 9],
+    [84, 8, 20, 3, 9],
+    [85, 8, 18, 3, 9],
+    [86, 8, 14, 3, 9],
+    [87, 8, 21, 3, 9],
+    [88, 8, 19, 3, 8],
+    [89, 8, 16, 3, 8],
+    [90, 8, 22, 3, 8],
+    [91, 8, 20, 3, 8],
+    [92, 8, 18, 3, 8],
+    [93, 8, 23, 3, 8],
+    [94, 8, 21, 3, 8],
+    [95, 8, 17, 3, 8],
+    [96, 8, 24, 3, 8],
+    [97, 8, 22, 3, 8],
+    [98, 8, 20, 3, 8],
+    [99, 8, 25, 3, 8],
+    [100, 8, 23, 3, 8], // hardest: 8×8, many walls, 3 TPs, sparse clues
 ];
 
 // Main
 
-console.log('Generating 50 Obstacles levels...');
+const existing = fs.existsSync('obstacles.enc')
+    ? JSON.parse(Buffer.from(fs.readFileSync('obstacles.enc', 'utf8').replace(/\s+/g, ''), 'base64').toString('utf8'))
+    : [];
+const kept = new Map(existing.map(l => [l.id, l]));
+console.log(`Keeping ${kept.size} existing levels, generating ${LEVEL_CONFIGS.filter(([id]) => !kept.has(id)).length}...`);
 const levels = [];
 
 for (const [id, size, walls, tpPairs, numNodes] of LEVEL_CONFIGS) {
+    if (kept.has(id)) { levels.push(kept.get(id)); continue; }
     process.stdout.write(`  Level ${id} (${size}×${size}, ${walls} walls, ${tpPairs} TP pairs, ${numNodes} clues)... `);
     const level = generateLevel(id, size, walls, tpPairs, numNodes);
     levels.push(level);
     console.log(`done (path len: ${level.solution.length}, walls: ${level.walls.length}, TPs: ${level.teleporters.length}, clues: ${level.clues.length})`);
 }
+
+// Self-check: each solution visits every cell once, never crosses a wall, only jumps between paired
+// teleporters, and passes the clues in order from first cell to last. Abort before writing if not.
+const problems = [];
+for (const lv of levels) {
+    const walls = new Set(lv.walls.map(w => wallKey(w.r, w.c, w.side)));
+    const tpAt = new Map(lv.teleporters.map(tp => [cellKey(tp.r, tp.c), tp.pair]));
+    const sol = lv.solution;
+    if (new Set(sol.map(p => cellKey(p.r, p.c))).size !== lv.size * lv.size || sol.length !== lv.size * lv.size) {
+        problems.push(`level ${lv.id}: solution must cover every cell once`);
+    }
+    for (let i = 0; i + 1 < sol.length; i++) {
+        const a = sol[i], b = sol[i + 1];
+        const adjacent = Math.abs(a.r - b.r) + Math.abs(a.c - b.c) === 1;
+        const jump = tpAt.has(cellKey(a.r, a.c)) && tpAt.get(cellKey(a.r, a.c)) === tpAt.get(cellKey(b.r, b.c));
+        if (adjacent && hasWall(walls, a.r, a.c, b.r, b.c)) problems.push(`level ${lv.id}: step ${i} crosses a wall`);
+        if (!adjacent && !jump) problems.push(`level ${lv.id}: step ${i} is not a move or teleport`);
+    }
+    const order = lv.clues.slice().sort((x, y) => x.val - y.val)
+        .map(cl => sol.findIndex(p => p.r === cl.r && p.c === cl.c));
+    if (order[0] !== 0 || order[order.length - 1] !== sol.length - 1 || order.some((v, k) => k && v <= order[k - 1])) {
+        problems.push(`level ${lv.id}: clues are not in path order from start to end`);
+    }
+}
+if (problems.length) throw new Error(`Self-check failed:\n${problems.join('\n')}`);
 
 const json = JSON.stringify(levels);
 const encoded = Buffer.from(json).toString('base64');

@@ -20,7 +20,8 @@ A high-fidelity, responsive HTML5 and Native Android implementation of the class
 * **Themes:** Built-in Dark Mode 🌙 and Light Mode ☀️ toggled via a professional Floating Action Button (FAB), complete with custom-themed scrollbars and dynamic favicons.
 
 ### Gameplay & Mechanics
-* **Dynamic Grid System:** Loads levels dynamically from obfuscated `.enc` files (`levels.enc` and `word_levels.enc`), utilizing Base64 encoding to prevent players from easily looking up solutions via browser developer tools.
+* **Dynamic Grid System:** Loads levels dynamically from obfuscated `.enc` files, utilizing Base64 encoding to prevent players from easily looking up solutions via browser developer tools: `levels.enc` (1,100 levels for Classic, Speedrun, Blindfold and Optimal Path), `word_levels.enc` (200 Connecting Letters levels) and `obstacles.enc` (100 Obstacles levels, up to 8×8).
+* **Level Generators:** `node generate_words.js` adds Connecting Letters levels from the bundled dictionary (`words.txt`), checking that every accepted word can actually be traced; `node generate_obstacles.js` adds Obstacles levels from its schedule and verifies every solution. Both keep existing levels so saved progress stays valid.
 * **Dual Input Support:**
     * **Mouse/Touch:** Drag to draw lines. Supports backtracking (scrubbing back) to correct mistakes dynamically.
     * **Keyboard:** Use **Arrow Keys** to draw lines precisely from your current position.

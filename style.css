@@ -74,6 +74,19 @@ body[data-mode="words"],
     outline-offset: 3px;
 }
 
+/* Registered as colors so the lobby can crossfade between mode accents */
+@property --accent {
+    syntax: '<color>';
+    inherits: true;
+    initial-value: #8fa8ff;
+}
+
+@property --accent-2 {
+    syntax: '<color>';
+    inherits: true;
+    initial-value: #c39bff;
+}
+
 /* Mobile Layout */
 button,
 a,
@@ -175,8 +188,8 @@ body {
         linear-gradient(var(--grid-line) 1px, transparent 1px) 0 0 / 52px 52px,
         linear-gradient(90deg, var(--grid-line) 1px, transparent 1px) 0 0 / 52px 52px,
         var(--bg-color);
-    /* visible at once when opening so openCarousel() can focus Play */
-    transition: opacity 0.4s ease, visibility 0s;
+    /* visible at once when opening so openCarousel() can focus Play; mode colors crossfade */
+    transition: opacity 0.4s ease, visibility 0s, --accent 0.45s ease, --accent-2 0.45s ease;
 }
 
 #carousel-overlay.hidden {
@@ -214,6 +227,12 @@ body {
     opacity: 0;
 }
 
+/* 2D lobby: the card zooms toward the player instead */
+#carousel-overlay.hiding:not(.lobby-3d) .lobby-card {
+    transform: translate(-50%, -50%) scale(1.08);
+    transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
 .lobby-bar {
     position: absolute;
     top: 0;
@@ -229,6 +248,9 @@ body {
 }
 
 .lobby-logo {
+    /* never wrap: a two-line subtitle squeezed the pills onto two rows on phones */
+    flex-shrink: 0;
+    white-space: nowrap;
     font-family: var(--font-display);
     font-weight: 900;
     font-size: 0.95rem;
@@ -255,7 +277,7 @@ body {
 
 .lobby-pill {
     min-height: 44px;
-    padding: 0 14px;
+    padding: 0 12px;
     border: 1px solid var(--glass-border);
     border-radius: 999px;
     background: var(--panel-bg);
@@ -433,6 +455,86 @@ body {
     margin: 0;
 }
 
+/* 2D lobby mode change: card content slides in from the direction of travel (the buttons stay put),
+   the grid steps like walking down the street, and the preview board pops in and draws its demo path */
+.lobby-card.lobby-step-next > :not(.lobby-actions) {
+    animation: lobby-in-next 0.42s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+
+.lobby-card.lobby-step-prev > :not(.lobby-actions) {
+    animation: lobby-in-prev 0.42s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+
+.lobby-card > :nth-child(2) { animation-delay: 0.04s; }
+.lobby-card > :nth-child(3) { animation-delay: 0.08s; }
+.lobby-card > :nth-child(4) { animation-delay: 0.12s; }
+.lobby-card > :nth-child(5) { animation-delay: 0.16s; }
+
+@keyframes lobby-in-next {
+    from { opacity: 0; transform: translateY(18px); }
+}
+
+@keyframes lobby-in-prev {
+    from { opacity: 0; transform: translateY(-18px); }
+}
+
+#carousel-overlay.lobby-step-next:not(.lobby-3d) {
+    animation: lobby-grid-next 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+#carousel-overlay.lobby-step-prev:not(.lobby-3d) {
+    animation: lobby-grid-prev 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes lobby-grid-next {
+    from { background-position: 0 0, 0 -52px, 0 -52px, 0 0; }
+}
+
+@keyframes lobby-grid-prev {
+    from { background-position: 0 0, 0 52px, 0 52px, 0 0; }
+}
+
+#carousel-overlay:not(.lobby-3d) .lobby-preview .mb-cell {
+    animation: mb-pop 0.32s ease-out backwards;
+    animation-delay: calc(var(--i) * 14ms);
+}
+
+#carousel-overlay:not(.lobby-3d) .lobby-preview .mb-node {
+    animation: mb-node-pop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+    animation-delay: calc(0.24s + var(--i) * 14ms);
+}
+
+#carousel-overlay:not(.lobby-3d) .lobby-preview .mb-path {
+    animation: mb-draw var(--demo-ms, 2500ms) ease-in-out 0.45s backwards;
+}
+
+@keyframes mb-pop {
+    from { opacity: 0; transform: scale(0.6); }
+}
+
+@keyframes mb-node-pop {
+    from { transform: scale(0); }
+}
+
+@keyframes mb-draw {
+    from { stroke-dashoffset: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .lobby-card > *,
+    #carousel-overlay,
+    .lobby-preview .mb-cell,
+    .lobby-preview .mb-node,
+    .lobby-preview .mb-path {
+        animation: none !important;
+    }
+
+    #carousel-overlay,
+    #carousel-overlay.hiding .lobby-card {
+        transition: none !important;
+    }
+}
+
 /* Mini board */
 .mini-board {
     display: grid;
@@ -449,7 +551,25 @@ body {
     overflow: hidden;
 }
 
+/* Demo path drawn under the cells (see generateMiniBoardHTML) */
+.mb-svg {
+    position: absolute;
+    inset: 7px;
+    pointer-events: none;
+}
+
+.mb-path {
+    fill: none;
+    stroke: var(--accent);
+    stroke-width: 0.3;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-dasharray: 1;
+    opacity: 0.9;
+}
+
 .mb-cell {
+    position: relative;
     border-radius: 2px;
     background: transparent;
     border: 1px solid rgba(127, 127, 127, 0.12);

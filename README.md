@@ -9,6 +9,7 @@ A high-fidelity, responsive HTML5 and Native Android implementation of the class
 * **Speedrun:** Race against the clock! The timer starts the moment you interact with the grid. Compete against your own Best Times saved to the cloud.
 * **Optimal Path:** Forget filling the grid—your goal is to connect the numbers in sequence using the *fewest tiles possible*. Tracks your most efficient routes.
 * **Blindfold:** A true memory and logic test. Numbers are hidden and are only revealed as you successfully connect them in the correct order.
+* **Obstacles:** Fill the grid while navigating walls that block movement and teleporter pairs that jump your path across the board. Played with the arrow keys or WASD.
 
 ## ✨ Features
 
@@ -42,7 +43,7 @@ A high-fidelity, responsive HTML5 and Native Android implementation of the class
 * **Mobile Optimized:**
     * Touch event support with `touch-action: none` to prevent native browser bouncing and scrolling.
     * **Portrait Mode Lock:** Forces mobile users to rotate their device for the best experience.
-* **Leaderboards & Tracking:** A slide-out leaderboard panel to track Daily Streaks and Speedrun times.
+* **Tracking:** Daily streaks, Speedrun best times, and Optimal Path best scores are saved per level and synced to your account.
 * **Dynamic Toast Notifications:** A custom flexbox container dynamically stacks multiple alerts without overlapping.
 * **Visual Polish:**
     * Premium "Level Complete" card UI that scales cleanly across all modes.

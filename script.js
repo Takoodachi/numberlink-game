@@ -96,6 +96,9 @@ class Game {
         this.lastHintDate = null;
 
         this.colors = ['#6d28d9', '#ef4444', '#059669', '#2563eb', '#db2777', '#d97706', '#0891b2'];
+        // Same hues, lightened to keep 3:1 against the dark board
+        this.darkColors = ['#a78bfa', '#f87171', '#34d399', '#60a5fa', '#f472b6', '#fbbf24', '#22d3ee'];
+        this.colorIndex = 0;
 
         this.settings = this.loadSettings();
 
@@ -253,10 +256,11 @@ class Game {
         let isVisible = false;
         let lastMoveTime = 0;
 
-        let accentColor = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#4f46e5';
+        // --accent lives on body and follows theme + mode
+        let accentColor = getComputedStyle(document.body).getPropertyValue('--accent').trim() || '#4f46e5';
         new MutationObserver(() => {
-            accentColor = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#4f46e5';
-        }).observe(document.body, { attributes: true, attributeFilter: ['class'] });
+            accentColor = getComputedStyle(document.body).getPropertyValue('--accent').trim() || '#4f46e5';
+        }).observe(document.body, { attributes: true, attributeFilter: ['class', 'data-mode'] });
 
         document.addEventListener('mousemove', (e) => {
             mouseX = e.clientX;
@@ -568,9 +572,13 @@ class Game {
 
     // Cloud Save and Load Methods
     async loadProgress() {
-        const saved = localStorage.getItem('linkGameData');
-        if (saved) {
-            const data = JSON.parse(saved);
+        let data = null;
+        try {
+            data = JSON.parse(localStorage.getItem('linkGameData'));
+        } catch (e) {
+            console.error("Ignoring corrupted local save:", e);
+        }
+        if (data) {
             this.currentLevelIndex = data.currentLevelIndex || 0;
             this.maxUnlockedIndex = data.maxUnlockedIndex || 0;
             this.streak = data.streak || 0;
@@ -594,11 +602,11 @@ class Game {
                 if (docSnap.exists()) {
                     const cloudData = docSnap.data();
 
-                    const localMax = this.maxUnlockedIndex || 0;
-                    const cloudMax = cloudData.maxUnlockedIndex || 0;
+                    const progressKeys = ['maxUnlockedIndex', 'maxUnlockedWordIndex', 'maxUnlockedObstacleIndex'];
+                    const differs = progressKeys.some(k => (this[k] || 0) !== (cloudData[k] || 0));
 
-                    if (localMax !== cloudMax) {
-                        const choice = await this.askForConflictResolution(localMax, cloudMax);
+                    if (differs) {
+                        const choice = await this.askForConflictResolution(this, cloudData);
                         if (choice === 'cloud') {
                             this.applyCloudData(cloudData);
                         } else {
@@ -656,7 +664,8 @@ class Game {
     applyCloudData(cloudData) {
         this.currentLevelIndex = cloudData.currentLevelIndex;
         this.maxUnlockedIndex = cloudData.maxUnlockedIndex;
-        this.hints = cloudData.hints;
+        this.hints = cloudData.hints !== undefined ? cloudData.hints : 2;
+        this.currentMode = cloudData.currentMode || this.currentMode;
         this.lastHintDate = cloudData.lastHintDate;
         this.streak = cloudData.streak || 0;
         this.currentWordLevelIndex = cloudData.currentWordLevelIndex || 0;
@@ -669,21 +678,24 @@ class Game {
 
         localStorage.setItem('linkGameData', JSON.stringify(cloudData));
         this.updateUI();
-        this.loadLevel(this.currentLevelIndex);
+        // enforceSavedMode() loads the right level for the restored mode
         this.enforceSavedMode();
     }
 
-    askForConflictResolution(localIndex, cloudIndex) {
+    askForConflictResolution(localData, cloudData) {
         return new Promise((resolve) => {
             const modal = document.getElementById('conflict-modal');
             const localBtn = document.getElementById('btn-keep-local');
             const cloudBtn = document.getElementById('btn-keep-cloud');
 
-            const localLvlString = this.allLevels[localIndex] ? `Level ${this.allLevels[localIndex].id}` : `Level ${localIndex + 1}`;
-            const cloudLvlString = this.allLevels[cloudIndex] ? `Level ${this.allLevels[cloudIndex].id}` : `Level ${cloudIndex + 1}`;
+            const summary = (d) => {
+                const i = d.maxUnlockedIndex || 0;
+                const classic = this.allLevels[i] ? this.allLevels[i].id : i + 1;
+                return `Level ${classic} · Words ${(d.maxUnlockedWordIndex || 0) + 1} · Obstacles ${(d.maxUnlockedObstacleIndex || 0) + 1}`;
+            };
 
-            document.getElementById('conflict-local-text').innerText = localLvlString;
-            document.getElementById('conflict-cloud-text').innerText = cloudLvlString;
+            document.getElementById('conflict-local-text').innerText = summary(localData);
+            document.getElementById('conflict-cloud-text').innerText = summary(cloudData);
 
             modal.classList.add('open');
 
@@ -1083,7 +1095,7 @@ class Game {
         } else if (this.currentMode === 'speedrun') {
             rulesHTML += `<div class="rule-item"><div class="rule-icon">⏱️</div><div class="rule-text">Same rules as Classic — but the clock is running!</div></div>`;
             rulesHTML += `<div class="rule-item"><div class="rule-icon">1-2-3</div><div class="rule-text">Connect numbers in order and fill every cell</div></div>`;
-            rulesHTML += `<div class="rule-item"><div class="rule-icon">🏆</div><div class="rule-text">Your best time per level is saved to the leaderboard</div></div>`;
+            rulesHTML += `<div class="rule-item"><div class="rule-icon">🏆</div><div class="rule-text">Your best time per level is saved</div></div>`;
             rulesHTML += `<div class="rule-item"><div class="rule-icon">🎮</div><div class="rule-text">${this.isMobile ? 'Drag from number to number' : 'Drag from number to number, or use arrow keys'}</div></div>`;
         } else if (this.currentMode === 'blindfold') {
             rulesHTML += `<div class="rule-item"><div class="rule-icon">❓</div><div class="rule-text">All numbers are hidden — connect them in order from memory</div></div>`;
@@ -1372,6 +1384,7 @@ class Game {
         if (this.currentMode === mode) return;
         if (this.currentMode === 'obstacles') this.stopObstacleGlow();
         this.currentMode = mode;
+        document.body.dataset.mode = mode;
 
         const targetIndex = mode === 'words' ? this.maxUnlockedWordIndex
                           : mode === 'obstacles' ? this.maxUnlockedObstacleIndex
@@ -3064,6 +3077,7 @@ class Game {
 
     applyTheme() {
         document.body.classList.toggle('dark-mode', this.isDarkMode);
+        this.setRandomColor(false);
 
         document.getElementById('theme-toggle').innerText = this.isDarkMode ? "☀️" : "🌙";
 
@@ -3082,10 +3096,10 @@ class Game {
         this.draw();
     }
 
-    setRandomColor() {
-        const randomIndex = Math.floor(Math.random() * this.colors.length);
-        const newColor = this.colors[randomIndex];
-        document.documentElement.style.setProperty('--line-color', newColor);
+    setRandomColor(pickNew = true) {
+        if (pickNew) this.colorIndex = Math.floor(Math.random() * this.colors.length);
+        const palette = this.isDarkMode ? this.darkColors : this.colors;
+        document.documentElement.style.setProperty('--line-color', palette[this.colorIndex]);
     }
 
     checkOrientation() {

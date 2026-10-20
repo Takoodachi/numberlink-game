@@ -1357,7 +1357,8 @@ class Game {
             accent: overlayStyle.getPropertyValue(`--m-${key}`).trim(),
             accent2: overlayStyle.getPropertyValue(`--m-${key}-2`).trim(),
         }));
-        import('./lobby3d.js')
+        // Reuse this script's ?v= so lobby3d.js is cache-busted with it
+        import('./lobby3d.js' + new URL(import.meta.url).search)
             .then(m => m.createLobbyScene(document.getElementById('lobby-canvas'), modes))
             .then(scene => {
                 this.lobbyScene = scene;

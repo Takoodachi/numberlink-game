@@ -23,13 +23,14 @@ const lerp = THREE.MathUtils.lerp;
 const STYLES = {
     classic:   { H: 2.35, jut: 0.20, screenTop: [0.16, 1.98], top: 'marquee', panel: 'joystick', topper: 'orbs' },
     speedrun:  { H: 2.2,  jut: 0.36, screenTop: [0.04, 1.88], top: 'slant',   panel: 'wheel',    topper: 'stopwatch' },
-    blindfold: { H: 2.45, jut: 0.20, screenTop: [0.12, 1.96], top: 'visor',   panel: 'joystick', topper: 'eye' },
-    optimal:   { H: 2.65, jut: 0.16, screenTop: [0.18, 2.00], top: 'peak',    panel: 'buttons',  topper: 'crystal' },
-    obstacles: { H: 2.3,  jut: 0.26, screenTop: [0.14, 1.96], top: 'marquee', panel: 'joystick', topper: 'portals' },
-    words:     { H: 2.4,  jut: 0.20, screenTop: [0.16, 1.98], top: 'arch',    panel: 'buttons',  topper: 'letters' },
+    blindfold: { H: 2.45, jut: 0.20, screenTop: [0.12, 1.96], top: 'visor',   panel: 'trackball', topper: 'eye' },
+    optimal:   { H: 2.65, jut: 0.16, screenTop: [0.18, 2.00], top: 'peak',    panel: 'spinner',  topper: 'crystal' },
+    obstacles: { H: 2.3,  jut: 0.26, screenTop: [0.14, 1.96], top: 'step',    panel: 'dpad',     topper: 'portals' },
+    words:     { H: 2.4,  jut: 0.24, screenTop: [0.16, 1.98], top: 'arch',    panel: 'keyboard', topper: 'letters' },
 };
 
-export async function createLobbyScene(canvas, modes) {
+// onPick(i) runs when a cabinet is clicked; onHover(bool) when the pointer moves onto or off one
+export async function createLobbyScene(canvas, modes, { onPick, onHover } = {}) {
     // Signs and screens are drawn in Orbitron/Outfit; wait so they don't bake in a fallback font
     await Promise.all([
         document.fonts.load('900 48px Orbitron'),
@@ -44,7 +45,7 @@ export async function createLobbyScene(canvas, modes) {
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(BG);
-    scene.fog = new THREE.Fog(BG, 12, 52);
+    scene.fog = new THREE.Fog(BG, 14, 64);
     scene.add(new THREE.HemisphereLight(0x8a96ff, 0x05060e, 1.0));
     const moonLight = new THREE.DirectionalLight(0x7f8cff, 0.9);
     moonLight.position.set(-6, 10, 4);
@@ -74,6 +75,7 @@ export async function createLobbyScene(canvas, modes) {
         addNumberLink(scene, modes, glowTex),
         addTraffic(scene, glowTex),
         addRain(scene, camera, low ? 260 : 600),
+        addArcadeHall(scene, glowTex),
     ];
     const cabinets = modes.map((m, i) => makeCabinet(scene, m, i, glowTex));
 
@@ -82,6 +84,33 @@ export async function createLobbyScene(canvas, modes) {
     window.addEventListener('pointermove', (e) => {
         pointer.x = (e.clientX / window.innerWidth) * 2 - 1;
         pointer.y = (e.clientY / window.innerHeight) * 2 - 1;
+    });
+
+    // Clicking a cabinet (any of its parts) picks that mode
+    const raycaster = new THREE.Raycaster();
+    raycaster.params.Line.threshold = 0.02;
+    const ndc = new THREE.Vector2();
+    const cabinetAt = (e) => {
+        const rect = canvas.getBoundingClientRect();
+        ndc.set(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
+        raycaster.setFromCamera(ndc, camera);
+        let hit = raycaster.intersectObjects(cabinets.map((c) => c.group), true)[0]?.object;
+        while (hit && hit.userData.index === undefined) hit = hit.parent;
+        return hit ? hit.userData.index : -1;
+    };
+    let hovering = false;
+    canvas.addEventListener('pointermove', (e) => {
+        if (!raf || e.pointerType === 'touch') return;
+        const over = cabinetAt(e) >= 0;
+        if (over !== hovering) {
+            hovering = over;
+            canvas.style.cursor = over ? 'pointer' : '';
+            if (onHover) onHover(over);
+        }
+    });
+    canvas.addEventListener('click', (e) => {
+        const i = raf ? cabinetAt(e) : -1;
+        if (i >= 0 && onPick) onPick(i);
     });
 
     // Camera pose for a fractional cabinet index t; zoom 1 = up against the focused screen
@@ -185,6 +214,15 @@ function profileShape(st) {
         // racer: crown slopes back
         s.lineTo(tz + 0.22, H);
         s.lineTo(B, H - 0.5);
+    } else if (st.top === 'step') {
+        // stepped crown, like the top of a wall
+        s.lineTo(tz + 0.24, ty + 0.06);
+        s.lineTo(tz + 0.24, H - 0.2);
+        s.lineTo(0.05, H - 0.2);
+        s.lineTo(0.05, H);
+        s.lineTo(-0.2, H);
+        s.lineTo(-0.2, H - 0.12);
+        s.lineTo(B, H - 0.12);
     } else if (st.top === 'peak') {
         // tall angular crown
         s.lineTo(tz + 0.1, H - 0.32);
@@ -229,16 +267,16 @@ function makeCabinet(scene, m, i, glowTex) {
     const trimMat = new THREE.LineBasicMaterial({ color: accent.clone() });
     const artGeo = new THREE.ShapeGeometry(new THREE.Shape(outline.map(p => p.clone().lerp(center, 0.14))));
     artGeo.rotateY(-Math.PI / 2);
-    const artMat = new THREE.MeshBasicMaterial({
-        map: sideArtTexture(m, st.H), transparent: true, side: THREE.DoubleSide, depthWrite: false,
-    });
+    const artTex = sideArtTexture(m, st.H);
     for (const sx of [-1, 1]) {
         const x = sx * (CAB_W / 2 + 0.036);
         cab.add(new THREE.LineLoop(
             new THREE.BufferGeometry().setFromPoints(outline.map(p => new THREE.Vector3(x, p.y, p.x))),
             trimMat
         ));
-        const art = new THREE.Mesh(artGeo, artMat);
+        const art = new THREE.Mesh(artGeo, new THREE.MeshBasicMaterial({
+            map: sx < 0 ? artTex : mirrored(artTex), transparent: true, side: THREE.DoubleSide, depthWrite: false,
+        }));
         art.position.x = x;
         cab.add(art);
     }
@@ -266,41 +304,13 @@ function makeCabinet(scene, m, i, glowTex) {
     glare.rotation.x = -theta;
     cab.add(screen, glare);
 
-    // Control panel: joystick, wheel or a button bank on the sloped top
+    // Control panel on the sloped top; each mode has its own controller
     const front = [0.42 + st.jut, 0.97], back = [0.30, 1.06];
     const panel = new THREE.Group();
     panel.position.set(0, (front[1] + back[1]) / 2 + 0.03, (front[0] + back[0]) / 2);
     panel.rotation.x = Math.atan2(back[1] - front[1], front[0] - back[0]);
     cab.add(panel);
-    const glowMat = (c, k = 0.6) => new THREE.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: k, roughness: 0.3 });
-    const btnMats = [glowMat(accent), glowMat(accent2), glowMat(new THREE.Color('#ffffff'), 0.4)];
-    const btnGeo = new THREE.CylinderGeometry(0.035, 0.035, 0.03, 16);
-    const button = (x, z, k) => {
-        const b = new THREE.Mesh(btnGeo, btnMats[k % 3]);
-        b.position.set(x, 0.015, z);
-        panel.add(b);
-    };
-    if (st.panel === 'wheel') {
-        const wheel = new THREE.Mesh(new THREE.TorusGeometry(0.17, 0.028, 10, 32), glowMat(accent, 0.5));
-        wheel.position.set(0, 0.14, -0.02);
-        wheel.rotation.x = -0.6;
-        const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 0.16, 12), darkMat);
-        hub.position.set(0, 0.07, 0);
-        panel.add(wheel, hub);
-        button(-0.42, 0, 1);
-        button(0.42, 0, 0);
-    } else if (st.panel === 'joystick') {
-        const base = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.07, 0.02, 20), darkMat);
-        const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.14, 8), darkMat);
-        const ball = new THREE.Mesh(new THREE.SphereGeometry(0.045, 16, 12), glowMat(accent, 0.7));
-        base.position.set(-0.3, 0.01, 0);
-        stick.position.set(-0.3, 0.08, 0);
-        ball.position.set(-0.3, 0.16, 0);
-        panel.add(base, stick, ball);
-        for (let k = 0; k < 3; k++) button(0.02 + k * 0.14, 0, k);
-    } else {
-        for (let k = 0; k < 6; k++) button(-0.2 + (k % 3) * 0.2, k < 3 ? -0.05 : 0.07, k);
-    }
+    const animatePanel = buildPanel(st.panel, panel, accent, accent2, darkMat);
 
     // Coin door with blinking slots and a neon kick strip
     const door = new THREE.Mesh(new RoundedBoxGeometry(0.46, 0.38, 0.05, 2, 0.02), darkMat);
@@ -336,6 +346,8 @@ function makeCabinet(scene, m, i, glowTex) {
     );
     glow.rotation.x = -Math.PI / 2;
     glow.position.set(0, 0.02, 0.8);
+    glow.raycast = () => {};
+    cab.userData.index = i;
     const light = new THREE.PointLight(accent, 6, 7);
     light.position.set(0, 1.6, 1.4);
     cab.add(sign, topper, glow, light);
@@ -344,6 +356,7 @@ function makeCabinet(scene, m, i, glowTex) {
     let flickerFrom = -10, attractStart = 0, lastPaint = 0, painted = true;
 
     return {
+        group: cab,
         powerOn(time) {
             flickerFrom = time;
             attractStart = time;
@@ -357,6 +370,7 @@ function makeCabinet(scene, m, i, glowTex) {
             const f = time - flickerFrom;
             sign.visible = !((f > 0.08 && f < 0.16) || (f > 0.3 && f < 0.36));
             spinTopper(time, focus);
+            animatePanel(time);
 
             // Attract mode: the focused screen redraws its demo path on a loop
             if (focus > 0.5) {
@@ -466,6 +480,104 @@ function buildTopper(kind, group, m, accent, accent2, glowTex) {
         letters.forEach((s, k) => {
             const a = time * 0.9 + (k / letters.length) * Math.PI * 2;
             s.position.set(Math.cos(a) * 0.36, Math.sin(time * 2 + k) * 0.05, Math.sin(a) * 0.36);
+        });
+    };
+}
+
+// Control panel per mode, idling as if someone is playing; returns its per-frame update
+function buildPanel(kind, panel, accent, accent2, darkMat) {
+    const glowMat = (c, k = 0.6) => new THREE.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: k, roughness: 0.3 });
+    const add = (geo, mat, x, y, z, parent = panel) => {
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.position.set(x, y, z);
+        parent.add(mesh);
+        return mesh;
+    };
+    const btnMats = [glowMat(accent), glowMat(accent2), glowMat(new THREE.Color('#ffffff'), 0.4)];
+    const btnGeo = new THREE.CylinderGeometry(0.035, 0.035, 0.03, 16);
+    const button = (x, z, k) => add(btnGeo, btnMats[k % 3], x, 0.015, z);
+
+    if (kind === 'wheel') {
+        // Racing wheel on a steering column
+        const wheel = add(new THREE.TorusGeometry(0.17, 0.028, 10, 32), glowMat(accent, 0.5), 0, 0.14, -0.02);
+        wheel.rotation.x = -0.6;
+        add(new THREE.CylinderGeometry(0.04, 0.05, 0.16, 12), darkMat, 0, 0.07, 0);
+        button(-0.42, 0, 1);
+        button(0.42, 0, 0);
+        return (time) => { wheel.rotation.z = Math.sin(time * 1.3) * 0.35; };
+    }
+    if (kind === 'joystick') {
+        // Ball-top joystick and three buttons
+        add(new THREE.CylinderGeometry(0.06, 0.07, 0.02, 20), darkMat, -0.3, 0.01, 0);
+        const stick = new THREE.Group();
+        stick.position.set(-0.3, 0.01, 0);
+        panel.add(stick);
+        add(new THREE.CylinderGeometry(0.012, 0.012, 0.14, 8), darkMat, 0, 0.07, 0, stick);
+        add(new THREE.SphereGeometry(0.045, 16, 12), glowMat(accent, 0.7), 0, 0.15, 0, stick);
+        for (let k = 0; k < 3; k++) button(0.02 + k * 0.14, 0, k);
+        return (time) => {
+            stick.rotation.z = Math.sin(time * 1.7) * 0.25;
+            stick.rotation.x = Math.cos(time * 1.1) * 0.2;
+        };
+    }
+    if (kind === 'trackball') {
+        // Glowing trackball in a bezel ring; the wire overlay shows it rolling
+        const ring = add(new THREE.TorusGeometry(0.1, 0.014, 8, 32), darkMat, -0.22, 0.01, 0);
+        ring.rotation.x = Math.PI / 2;
+        const ball = add(new THREE.SphereGeometry(0.085, 24, 16), new THREE.MeshStandardMaterial({
+            color: accent, emissive: accent, emissiveIntensity: 0.35, roughness: 0.15, metalness: 0.2,
+        }), -0.22, 0.02, 0);
+        add(new THREE.SphereGeometry(0.087, 8, 6), new THREE.MeshBasicMaterial({
+            color: accent2, wireframe: true, transparent: true, opacity: 0.5,
+        }), 0, 0, 0, ball);
+        button(0.12, 0, 1);
+        button(0.3, 0, 2);
+        return (time) => {
+            ball.rotation.x = time * 1.2;
+            ball.rotation.z = time * 0.7;
+        };
+    }
+    if (kind === 'spinner') {
+        // Rotary spinner knob with grip ridges and a marker, plus a row of buttons
+        const knob = add(new THREE.CylinderGeometry(0.075, 0.08, 0.06, 10), darkMat, -0.25, 0.03, 0);
+        add(new THREE.CylinderGeometry(0.05, 0.05, 0.012, 24), glowMat(accent, 0.8), 0, 0.035, 0, knob);
+        add(new THREE.BoxGeometry(0.012, 0.014, 0.05), glowMat(accent2, 0.8), 0, 0.04, 0.03, knob);
+        for (let k = 0; k < 4; k++) button(k * 0.12, 0, k);
+        return (time) => { knob.rotation.y = time * 1.5; };
+    }
+    if (kind === 'dpad') {
+        // Cross-shaped D-pad (the mode is played with arrow keys) and two action buttons
+        const pad = new THREE.Group();
+        pad.position.set(-0.26, 0.015, 0);
+        panel.add(pad);
+        const arm = new THREE.BoxGeometry(0.17, 0.03, 0.055);
+        add(arm, darkMat, 0, 0, 0, pad);
+        add(arm, darkMat, 0, 0, 0, pad).rotation.y = Math.PI / 2;
+        add(new THREE.CylinderGeometry(0.02, 0.02, 0.034, 12), glowMat(accent, 0.8), 0, 0, 0, pad);
+        const tips = [[0.07, 0], [0, 0.07], [-0.07, 0], [0, -0.07]].map(([x, z]) =>
+            add(new THREE.BoxGeometry(0.022, 0.034, 0.022), glowMat(accent2, 0.2), x, 0.002, z, pad));
+        button(0.16, -0.02, 0);
+        button(0.3, 0.02, 1);
+        // Arrows light in turn: each tip lights for half a second every 2 s
+        return (time) => {
+            const lit = Math.floor(time * 2) % 4;
+            tips.forEach((tip, k) => { tip.material.emissiveIntensity = k === lit ? 1.2 : 0.15; });
+        };
+    }
+    // keyboard: three rows of keycaps, lit one at a time as if someone is typing
+    const keyGeo = new THREE.BoxGeometry(0.06, 0.022, 0.05);
+    const keys = [];
+    for (let row = 0; row < 3; row++) {
+        for (let k = 0; k < 9 - row; k++) {
+            keys.push(add(keyGeo, glowMat(new THREE.Color(row === 1 && k === 3 ? accent2 : '#cfd6ff'), 0.12),
+                -0.36 + row * 0.035 + k * 0.08, 0.011, -0.075 + row * 0.065));
+        }
+    }
+    return (time) => {
+        const lit = Math.floor(time * 4) % keys.length;
+        keys.forEach((key, k) => {
+            key.material.emissiveIntensity = k === lit ? 1.0 : 0.12;
+            key.position.y = k === lit ? 0.004 : 0.011;
         });
     };
 }
@@ -591,27 +703,91 @@ function paintMarquee(ctx, w, h, m) {
     ctx.fillText(text, w / 2, h / 2);
 }
 
-// Diagonal speed stripes in the mode's colors; UVs of the side panel are profile units
+// Side art in the mode's colors; UVs of the side panel are profile units (z, y)
 function sideArtTexture(m, H) {
     const tex = canvasTexture(256, 512, (ctx, w, h) => {
         const g = ctx.createLinearGradient(0, h, w, 0);
         g.addColorStop(0, m.accent);
         g.addColorStop(1, m.accent2);
-        ctx.fillStyle = g;
-        for (let k = 0; k < 3; k++) {
-            const y = h * (0.42 + k * 0.1), t = 22 - k * 6;
-            ctx.globalAlpha = 0.55 - k * 0.12;
+        ctx.fillStyle = ctx.strokeStyle = g;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        if (m.key === 'speedrun') {
+            // Checkered flag band
+            ctx.globalAlpha = 0.5;
+            for (let r = 0; r < 4; r++) {
+                for (let c = 0; c < w / 22; c++) if ((r + c) % 2 === 0) ctx.fillRect(c * 22, h * 0.48 + r * 22, 22, 22);
+            }
+        } else if (m.key === 'blindfold') {
+            // Question marks: what's hidden?
+            ctx.font = '900 54px Orbitron, sans-serif';
+            [[0.3, 0.36], [0.7, 0.48], [0.4, 0.62], [0.75, 0.74], [0.25, 0.84]].forEach(([x, y], k) => {
+                ctx.globalAlpha = 0.25 + (k % 2) * 0.25;
+                ctx.fillText('?', w * x, h * y);
+            });
+        } else if (m.key === 'optimal') {
+            // The shortest route: an L-shaped path between two dots on a faint grid
+            ctx.globalAlpha = 0.18;
+            ctx.lineWidth = 2;
+            for (let x = 16; x < w; x += 32) { ctx.beginPath(); ctx.moveTo(x, h * 0.35); ctx.lineTo(x, h * 0.9); ctx.stroke(); }
+            for (let y = h * 0.35; y < h * 0.9; y += 32) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
+            ctx.globalAlpha = 0.65;
+            ctx.lineWidth = 12;
+            ctx.lineCap = ctx.lineJoin = 'round';
             ctx.beginPath();
-            ctx.moveTo(0, y + 70);
-            ctx.lineTo(w, y - 70);
-            ctx.lineTo(w, y - 70 + t);
-            ctx.lineTo(0, y + 70 + t);
-            ctx.fill();
+            ctx.moveTo(w * 0.2, h * 0.42);
+            ctx.lineTo(w * 0.2, h * 0.8);
+            ctx.lineTo(w * 0.8, h * 0.8);
+            ctx.stroke();
+            [[0.2, 0.42], [0.8, 0.8]].forEach(([x, y]) => { ctx.beginPath(); ctx.arc(w * x, h * y, 14, 0, Math.PI * 2); ctx.fill(); });
+        } else if (m.key === 'obstacles') {
+            // Hazard stripes in the game's wall orange
+            ctx.globalAlpha = 0.55;
+            ctx.fillStyle = '#f97316';
+            const top = h * 0.5, band = h * 0.16;
+            ctx.beginPath();
+            ctx.rect(0, top, w, band);
+            ctx.clip();
+            for (let x = -band; x < w + band; x += 40) {
+                ctx.beginPath();
+                ctx.moveTo(x, top);
+                ctx.lineTo(x + 20, top);
+                ctx.lineTo(x + 20 + band, top + band);
+                ctx.lineTo(x + band, top + band);
+                ctx.fill();
+            }
+        } else if (m.key === 'words') {
+            // Scattered letters
+            ctx.font = '900 40px Orbitron, sans-serif';
+            'LINKWORDSPLAY'.split('').forEach((ch, k) => {
+                ctx.globalAlpha = 0.2 + (k % 3) * 0.15;
+                ctx.fillText(ch, w * (0.15 + ((k * 37) % 70) / 100), h * (0.34 + ((k * 23) % 55) / 100));
+            });
+        } else {
+            // Diagonal speed stripes
+            for (let k = 0; k < 3; k++) {
+                const y = h * (0.42 + k * 0.1), t = 22 - k * 6;
+                ctx.globalAlpha = 0.55 - k * 0.12;
+                ctx.beginPath();
+                ctx.moveTo(0, y + 70);
+                ctx.lineTo(w, y - 70);
+                ctx.lineTo(w, y - 70 + t);
+                ctx.lineTo(0, y + 70 + t);
+                ctx.fill();
+            }
         }
     });
     tex.repeat.set(1 / 1.25, 1 / H);
     tex.offset.set(0.47 / 1.25, 0);
     return tex;
+}
+
+// The +x side is seen from the other direction, so flip it horizontally to read the right way round
+function mirrored(tex) {
+    const copy = tex.clone();
+    copy.repeat.x = -tex.repeat.x;
+    copy.offset.x = 1 - tex.offset.x;
+    return copy;
 }
 
 function glareTexture() {
@@ -710,7 +886,7 @@ function addStreetLamps(scene, glowTex) {
     const poolGeo = new THREE.PlaneGeometry(3.2, 3.2);
     let failing = null;
 
-    for (let k = 0; k < 7; k++) {
+    for (let k = 0; k < 9; k++) {
         for (const side of [-1, 1]) {
             const lamp = new THREE.Group();
             lamp.position.set(side * 4.4, 0, 3.5 - k * SPACING);
@@ -736,7 +912,7 @@ function addStreetLamps(scene, glowTex) {
     };
 }
 
-// Towers with lit windows, blade signs facing the street, rooftop beacons and a billboard at the end
+// Towers with lit windows, blade signs facing the street and rooftop beacons, all the way to the arcade hall
 function addSkyline(scene) {
     const tints = ['#ffd9a0', '#9fc4ff', '#ff9ad5'];
     const windows = canvasTexture(128, 256, (ctx, w, h) => {
@@ -759,7 +935,7 @@ function addSkyline(scene) {
     const flickering = [];
     let beacons = [];
 
-    for (let i = 0; i < 30; i++) {
+    for (let i = 0; i < 44; i++) {
         const side = i % 2 === 0 ? 1 : -1;
         const w = 3 + Math.random() * 4, h = 6 + Math.random() * 18, d = 3 + Math.random() * 4;
         const x = side * (8 + w / 2 + Math.random() * 5), z = 8 - Math.floor(i / 2) * 3.6;
@@ -787,38 +963,198 @@ function addSkyline(scene) {
         }
     }
 
-    // The street ends at a big hue-shifting billboard
-    const billboard = new THREE.Mesh(
-        new THREE.PlaneGeometry(14, 4.2),
-        new THREE.MeshBasicMaterial({
-            map: canvasTexture(1024, 308, (ctx, w, h) => {
-                ctx.fillStyle = 'rgba(8, 10, 24, 0.85)';
-                ctx.fillRect(0, 0, w, h);
-                ctx.strokeStyle = '#ffffff';
-                ctx.lineWidth = 8;
-                ctx.strokeRect(10, 10, w - 20, h - 20);
-                ctx.fillStyle = '#ffffff';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.font = '900 120px Orbitron, sans-serif';
-                ctx.fillText('INSERT COIN', w / 2, h * 0.44);
-                ctx.font = '700 36px Outfit, sans-serif';
-                ctx.fillText('NUMBER LINK ARCADE  ·  SIX MODES  ·  ONE BOARD', w / 2, h * 0.78);
-            }),
-            transparent: true,
-            fog: false,
-        })
-    );
-    billboard.position.set(0, 14, -SPACING * 5 - 34);
-    scene.add(billboard);
-
     return (time) => {
-        billboard.material.color.setHSL((0.62 + time * 0.03) % 1, 0.7, 0.55);
         beacons.forEach((b, k) => { b.visible = (time + k * 0.4) % 1.6 < 0.8; });
         flickering.forEach((sign, k) => {
             const f = (time + k * 1.7) % 4.3;
             sign.visible = !((f > 0 && f < 0.09) || (f > 0.28 && f < 0.36));
         });
+    };
+}
+
+// The street ends at an arcade hall: a neon gateway, plaza props, and the INSERT COIN billboard on the roof
+function addArcadeHall(scene, glowTex) {
+    const front = -SPACING * 5 - 26; // hall facade, well past the last cabinet
+    const hall = new THREE.Group();
+    hall.position.z = front;
+    scene.add(hall);
+    const dark = new THREE.MeshStandardMaterial({ color: 0x0c0f22, roughness: 0.5, metalness: 0.5 });
+    const basic = (color, extra = {}) => new THREE.MeshBasicMaterial({ color, ...extra });
+    const add = (parent, geo, mat, x, y, z) => {
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.position.set(x, y, z);
+        parent.add(mesh);
+        return mesh;
+    };
+    const outline = (parent, geo, color, x, y, z) => {
+        const lines = new THREE.LineSegments(new THREE.EdgesGeometry(geo), new THREE.LineBasicMaterial({ color }));
+        lines.position.set(x, y, z);
+        parent.add(lines);
+    };
+
+    // Building: a wide block with a neon outline and two light strips across the front
+    const bodyGeo = new THREE.BoxGeometry(18, 8, 6);
+    add(hall, bodyGeo, dark, 0, 4, -3);
+    outline(hall, bodyGeo, '#ff4fd8', 0, 4, -3);
+    for (const y of [5.6, 6.5]) add(hall, new THREE.BoxGeometry(17.4, 0.06, 0.06), basic('#46e8ff'), 0, y, 0.03);
+
+    // Glowing open entrance under a striped awning, lighting the plaza
+    add(hall, new THREE.PlaneGeometry(4.2, 3.2), basic('#ffffff', {
+        map: canvasTexture(256, 196, (ctx, w, h) => {
+            const g = ctx.createLinearGradient(0, 0, 0, h);
+            g.addColorStop(0, '#ffcf8a');
+            g.addColorStop(1, '#ff6fb5');
+            ctx.fillStyle = g;
+            ctx.fillRect(0, 0, w, h);
+            ctx.fillStyle = 'rgba(8, 10, 24, 0.55)';
+            ctx.fillRect(w / 2 - 3, 0, 6, h);
+            ctx.font = '900 34px Orbitron, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('OPEN', w / 2, h * 0.32);
+        }),
+    }), 0, 1.6, 0.02);
+    add(hall, new THREE.BoxGeometry(5, 0.16, 1.2), basic('#ffffff', {
+        map: canvasTexture(128, 16, (ctx, w, h) => {
+            for (let x = 0; x < w; x += 16) {
+                ctx.fillStyle = (x / 16) % 2 ? '#ff4fd8' : '#1a1030';
+                ctx.fillRect(x, 0, 16, h);
+            }
+        }),
+    }), 0, 3.45, 0.6);
+    const doorLight = new THREE.PointLight('#ffb08a', 10, 16);
+    doorLight.position.set(0, 2.4, 2.5);
+    hall.add(doorLight);
+
+    // The INSERT COIN billboard on two posts on the roof; its color slowly shifts
+    const billboard = add(hall, new THREE.PlaneGeometry(14, 4.2), new THREE.MeshBasicMaterial({
+        map: canvasTexture(1024, 308, (ctx, w, h) => {
+            ctx.fillStyle = 'rgba(8, 10, 24, 0.85)';
+            ctx.fillRect(0, 0, w, h);
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 8;
+            ctx.strokeRect(10, 10, w - 20, h - 20);
+            ctx.fillStyle = '#ffffff';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.font = '900 120px Orbitron, sans-serif';
+            ctx.fillText('INSERT COIN', w / 2, h * 0.44);
+            ctx.font = '700 36px Outfit, sans-serif';
+            ctx.fillText('NUMBER LINK ARCADE  ·  SIX MODES  ·  ONE BOARD', w / 2, h * 0.78);
+        }),
+        transparent: true,
+        fog: false,
+    }), 0, 10.6, -0.6);
+    for (const x of [-4.5, 4.5]) add(hall, new THREE.CylinderGeometry(0.12, 0.12, 2.2, 8), dark, x, 9.1, -0.8);
+
+    // Slowly turning wireframe hologram above the roof
+    const holo = add(hall, new THREE.IcosahedronGeometry(1.8, 0), basic('#7ef0c4', { wireframe: true, fog: false }), 0, 15.2, -3);
+    const core = add(holo, new THREE.OctahedronGeometry(0.6), basic('#c39bff', { fog: false }), 0, 0, 0);
+
+    // Gateway arch over the street before the plaza; its name sign hangs on the hall front so it doesn't cover the billboard
+    const gate = new THREE.Group();
+    gate.position.z = 14;
+    hall.add(gate);
+    for (const x of [-4.2, 4.2]) {
+        const pillarGeo = new THREE.BoxGeometry(0.4, 5.5, 0.4);
+        add(gate, pillarGeo, dark, x, 2.75, 0);
+        outline(gate, pillarGeo, '#46e8ff', x, 2.75, 0);
+    }
+    add(gate, new THREE.TorusGeometry(4.2, 0.07, 8, 64, Math.PI), basic('#ff4fd8'), 0, 5.5, 0);
+    add(gate, new THREE.TorusGeometry(3.9, 0.04, 8, 64, Math.PI), basic('#46e8ff'), 0, 5.5, 0);
+    add(hall, new THREE.PlaneGeometry(5, 1.1), basic('#ffffff', {
+        map: canvasTexture(512, 116, (ctx, w, h) => {
+            ctx.fillStyle = 'rgba(8, 10, 24, 0.9)';
+            ctx.fillRect(0, 0, w, h);
+            ctx.strokeStyle = '#ff4fd8';
+            ctx.lineWidth = 6;
+            ctx.strokeRect(3, 3, w - 6, h - 6);
+            ctx.fillStyle = '#ffd166';
+            ctx.shadowColor = '#ffd166';
+            ctx.shadowBlur = 12;
+            ctx.font = '900 54px Orbitron, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('ARCADE HALL', w / 2, h / 2 + 2);
+        }),
+        transparent: true,
+    }), 0, 4.6, 0.04);
+
+    // Neon rings on the plaza floor
+    for (const [r, color] of [[5.6, '#46e8ff'], [4.4, '#ff4fd8']]) {
+        const ring = add(hall, new THREE.RingGeometry(r, r + 0.12, 72), basic(color, {
+            transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending, depthWrite: false,
+        }), 0, 0.03, 6);
+        ring.rotation.x = -Math.PI / 2;
+    }
+
+    // Two drink vending machines to the right of the door
+    const vendFront = canvasTexture(128, 256, (ctx, w, h) => {
+        ctx.fillStyle = '#10142e';
+        ctx.fillRect(0, 0, w, h);
+        ctx.fillStyle = '#46e8ff';
+        ctx.font = '900 20px Orbitron, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('DRINKS', w / 2, 30);
+        const cans = ['#ff4fd8', '#ffd166', '#7ef0c4', '#8fa8ff'];
+        for (let r = 0; r < 4; r++) {
+            for (let c = 0; c < 3; c++) {
+                ctx.fillStyle = cans[(r + c) % cans.length];
+                ctx.fillRect(16 + c * 36, 48 + r * 44, 24, 34);
+            }
+        }
+        ctx.fillStyle = '#ff7a3c';
+        ctx.fillRect(w / 2 - 20, h - 26, 40, 8);
+    });
+    for (const x of [4.2, 5.5]) {
+        add(hall, new THREE.BoxGeometry(1.1, 2.1, 0.8), dark, x, 1.05, 1);
+        add(hall, new THREE.PlaneGeometry(0.95, 1.9), basic('#ffffff', { map: vendFront }), x, 1.05, 1.41);
+    }
+
+    // Claw machine to the left of the door; the claw roams and drops for a prize
+    const claw = new THREE.Group();
+    claw.position.set(-4.4, 0, 1.2);
+    hall.add(claw);
+    const cabGeo = new THREE.BoxGeometry(1.2, 0.9, 1.2);
+    add(claw, cabGeo, dark, 0, 0.45, 0);
+    outline(claw, cabGeo, '#ffd166', 0, 0.45, 0);
+    const glassGeo = new THREE.BoxGeometry(1.2, 1.3, 1.2);
+    add(claw, glassGeo, basic('#9fb4ff', { transparent: true, opacity: 0.08, depthWrite: false }), 0, 1.55, 0);
+    outline(claw, glassGeo, '#46e8ff', 0, 1.55, 0);
+    add(claw, new THREE.BoxGeometry(1.2, 0.3, 1.2), dark, 0, 2.35, 0);
+    add(claw, new THREE.PlaneGeometry(1.1, 0.24), basic('#ffffff', {
+        map: canvasTexture(256, 56, (ctx, w, h) => {
+            ctx.fillStyle = '#1a1030';
+            ctx.fillRect(0, 0, w, h);
+            ctx.fillStyle = '#ffd166';
+            ctx.font = '900 34px Orbitron, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('PRIZES', w / 2, h / 2 + 2);
+        }),
+    }), 0, 2.35, 0.61);
+    ['#ff4fd8', '#46e8ff', '#ffd166', '#7ef0c4', '#8fa8ff', '#ff7a3c'].forEach((color, k) => {
+        add(claw, new THREE.SphereGeometry(0.12, 12, 8), basic(color), -0.35 + (k % 3) * 0.35, 1.02, -0.2 + Math.floor(k / 3) * 0.4);
+    });
+    const grabber = new THREE.Group();
+    claw.add(grabber);
+    add(grabber, new THREE.CylinderGeometry(0.012, 0.012, 0.5, 6), basic('#cfd6ff'), 0, 0.25, 0);
+    for (let k = 0; k < 3; k++) {
+        const prong = add(grabber, new THREE.BoxGeometry(0.03, 0.14, 0.03), basic('#cfd6ff'), 0, -0.03, 0);
+        const a = (k / 3) * Math.PI * 2;
+        prong.position.x = Math.cos(a) * 0.06;
+        prong.position.z = Math.sin(a) * 0.06;
+    }
+
+    return (time) => {
+        billboard.material.color.setHSL((0.62 + time * 0.03) % 1, 0.7, 0.55);
+        holo.rotation.y = time * 0.25;
+        holo.rotation.x = Math.sin(time * 0.3) * 0.3;
+        core.rotation.y = -time * 0.8;
+        // Claw: roam for 4 s, then drop and rise over 2 s
+        const cycle = time % 6;
+        grabber.position.x = Math.sin(time * 0.6) * 0.4;
+        grabber.position.z = Math.cos(time * 0.45) * 0.35;
+        grabber.position.y = cycle < 4 ? 1.9 : 1.9 - Math.sin(((cycle - 4) / 2) * Math.PI) * 0.65;
     };
 }
 

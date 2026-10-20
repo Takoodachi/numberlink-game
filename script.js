@@ -129,8 +129,6 @@ class Game {
         this.maxUnlockedWordIndex = 0;
         this.currentObstacleLevelIndex = 0;
         this.maxUnlockedObstacleIndex = 0;
-        this.lastScrollTop = 0;
-        this.currentWordString = '';
         this.devEmail = 'luongdtran06@gmail.com';
         this.currentMode = 'classic';
 
@@ -161,7 +159,6 @@ class Game {
         this.carouselCanDismiss = false;
         this.lastLoginDate = null;
         this.currentUser = null;
-        this.searchTimeout = null;
         this.currentDragLine = null;
         this.lastMoveCell = null;
         this.lastHintDate = null;
@@ -255,16 +252,7 @@ class Game {
         document.getElementById('level-panel-search-input').addEventListener('keydown', (e) => {
             if (e.key === 'Enter') this.executePanelSearch();
         });
-        const levelPanelGrid = document.getElementById('level-panel-grid');
-        levelPanelGrid.addEventListener('scroll', () => {
-            const currentScrollTop = levelPanelGrid.scrollTop;
-            this.lastScrollTop = currentScrollTop <= 0 ? 0 : currentScrollTop;
-        });
         document.getElementById('close-level-panel-btn').onclick = () => this.closeLevelPanel();
-        document.getElementById('close-level-btn').onclick = () => this.closeLevelModal();
-        document.getElementById('level-modal').addEventListener('click', (e) => {
-            if (e.target.id === 'level-modal') this.closeLevelModal();
-        });
 
         document.getElementById('close-promo-btn').onclick = () => document.getElementById('promo-modal').classList.remove('open');
         document.getElementById('btn-promo-guest').onclick = () => document.getElementById('promo-modal').classList.remove('open');
@@ -389,7 +377,7 @@ class Game {
         };
         render();
 
-        const interactable = 'button, a, .level-indicator, .auth-toggle span, .contact-corner, .lvl-btn, .tab-btn, .title-row';
+        const interactable = 'button, a, .auth-toggle span, .contact-corner, .lvl-btn, .title-row';
         document.addEventListener('mouseover', (e) => {
             if (e.target.closest(interactable)) dot.classList.add('cursor-hover');
         });
@@ -401,7 +389,6 @@ class Game {
     // Authentication Methods
     initAuth() {
         const authBtn = document.getElementById('auth-btn');
-        const sidebarAuthBtn = document.getElementById('sidebar-auth-trigger');
 
         authBtn.innerText = this.isMobile ? "Profile" : "Profile / Settings";
 
@@ -411,19 +398,16 @@ class Game {
                     await signOut(auth);
                     this.currentUser = null;
                     this.isDevMode = false;
-                    if (sidebarAuthBtn) sidebarAuthBtn.innerText = "Login / Register";
                     await this.loadProgress();
                     return;
                 }
 
                 this.currentUser = user;
                 this.isDevMode = (user.email === this.devEmail);
-                if (sidebarAuthBtn) sidebarAuthBtn.innerText = "Profile / Settings";
                 await this.loadProgress();
             } else {
                 this.currentUser = null;
                 this.isDevMode = false;
-                if (sidebarAuthBtn) sidebarAuthBtn.innerText = "Login / Register";
                 await this.loadProgress();
 
                 const today = new Date();
@@ -785,42 +769,6 @@ class Game {
     }
 
     // Level Selection Methods
-    executeSearch() {
-        const searchInput = document.getElementById('level-search');
-        if (!searchInput) return;
-        const searchTerm = searchInput.value.trim();
-        const grid = document.getElementById('level-grid');
-        if (!grid) return;
-        for (let btn of grid.getElementsByClassName('lvl-btn')) {
-            btn.style.display = (searchTerm === '' || btn.innerText.includes(searchTerm)) ? '' : 'none';
-        }
-    }
-
-    openLevelModal() {
-        // Kept for mobile compatibility — on mobile still uses center modal
-        const modal = document.getElementById('level-modal');
-        const grid = document.getElementById('level-grid');
-        const searchInput = document.getElementById('level-search');
-        const searchContainer = document.querySelector('.search-container');
-
-        if (searchContainer) {
-            if (this.currentMode === 'words' || this.currentMode === 'obstacles') {
-                searchContainer.style.display = 'none';
-            } else {
-                searchContainer.style.display = 'flex';
-                searchContainer.classList.remove('hidden');
-            }
-        }
-
-        grid.scrollTop = 0;
-        this.lastScrollTop = 0;
-        grid.innerHTML = '';
-        if (searchInput) searchInput.value = '';
-
-        this.fillLevelGridInto(grid);
-        modal.classList.add('open');
-    }
-
     openLevelPanel() {
         const panel = document.getElementById('level-panel');
         const backdrop = document.getElementById('level-panel-backdrop');
@@ -833,7 +781,6 @@ class Game {
         }
 
         grid.scrollTop = 0;
-        this.lastScrollTop = 0;
         grid.innerHTML = '';
         if (searchInput) searchInput.value = '';
 
@@ -991,7 +938,7 @@ class Game {
             this.resizeCanvas();
             this.updateUI();
             this.boardEntranceAnimation();
-            this.closeLevelPanel(); this.closeLevelModal();
+            this.closeLevelPanel();
             return;
         }
 
@@ -1035,11 +982,10 @@ class Game {
             this.userLines = [];
             this.currentDragLine = null;
             this.isWinning = false;
-            this.currentWordString = "";
             this.resizeCanvas();
             this.updateUI();
             this.boardEntranceAnimation();
-            this.closeLevelPanel(); this.closeLevelModal();
+            this.closeLevelPanel();
             return;
         }
 
@@ -1071,7 +1017,7 @@ class Game {
         this.maxNumber = maxVal;
         this.updateUI();
         this.boardEntranceAnimation();
-        this.closeLevelPanel(); this.closeLevelModal();
+        this.closeLevelPanel();
     }
 
     boardEntranceAnimation() {
@@ -1136,7 +1082,6 @@ class Game {
         requestAnimationFrame(animate);
     }
 
-    closeLevelModal() { document.getElementById('level-modal').classList.remove('open'); }
 
     closeLevelPanel() {
         const panel = document.getElementById('level-panel');
@@ -1369,7 +1314,11 @@ class Game {
             accent2: overlayStyle.getPropertyValue(`--m-${key}-2`).trim(),
         }));
         import('./lobby3d.js' + ASSET_VERSION)
-            .then(m => m.createLobbyScene(document.getElementById('lobby-canvas'), modes))
+            .then(m => m.createLobbyScene(document.getElementById('lobby-canvas'), modes, {
+                onPick: (i) => this.pickCabinet(i),
+                // The custom cursor dot grows over cabinets like it does over buttons
+                onHover: (over) => document.getElementById('cursor-dot')?.classList.toggle('cursor-hover', over),
+            }))
             .then(scene => {
                 this.lobbyScene = scene;
                 scene.goTo(this.carouselIndex, true);
@@ -1421,7 +1370,19 @@ class Game {
         return html;
     }
 
+    // Clicking a cabinet in the 3D street: fly to it if it isn't focused, then play that mode
+    pickCabinet(i) {
+        if (this.carouselOverlay.classList.contains('hiding')) return;
+        clearTimeout(this.pickTimer);
+        if (i === this.carouselIndex) return this.chooseCarouselMode(i);
+        this.lobbyDir = Math.sign(i - this.carouselIndex);
+        this.carouselIndex = i;
+        this.renderLobby();
+        this.pickTimer = setTimeout(() => this.chooseCarouselMode(i), 650);
+    }
+
     moveCarousel(dir) {
+        clearTimeout(this.pickTimer);
         const n = this.carouselModes.length;
         this.carouselIndex = (this.carouselIndex + dir + n) % n;
         this.lobbyDir = dir;
@@ -1681,15 +1642,6 @@ class Game {
     getObstacleTP(r, c) {
         if (this.currentMode !== 'obstacles') return null;
         return this.obstacleTeleporters.find(t => t.r === r && t.c === c) || null;
-    }
-
-    isValidTPEntry(fromR, fromC, toR, toC, dir) {
-        const dr = toR - fromR, dc = toC - fromC;
-        if (dir === 'right') return dr === 0 && dc === 1;
-        if (dir === 'left')  return dr === 0 && dc === -1;
-        if (dir === 'down')  return dr === 1 && dc === 0;
-        if (dir === 'up')    return dr === -1 && dc === 0;
-        return false;
     }
 
     attemptMove(r, c) {
@@ -1996,7 +1948,6 @@ class Game {
                         finalWord += this.grid[pt.r][pt.c].letter;
                     }
 
-                    this.currentWordString = finalWord;
                     const hintsDisplay = document.getElementById('hints-display');
                     if (hintsDisplay) hintsDisplay.innerText = finalWord;
 
@@ -2469,10 +2420,6 @@ class Game {
     }
 
     updateUI() {
-        if (this.allLevels && this.allLevels[this.currentLevelIndex]) {
-            // level-select-btn removed; level shown in panel
-        }
-
         const streakDisplay = document.getElementById('streak-display');
         if (streakDisplay) {
             if (this.currentUser) {
@@ -2537,7 +2484,6 @@ class Game {
             answerBtn.style.display = 'none';
             if (bestTimeDisplay) bestTimeDisplay.style.display = 'none';
         } else if (this.currentMode === 'words') {
-            // level-select-btn removed
             hintBtn.innerText = "Hint";
             hintBtn.onclick = () => this.useHint();
             hintBtn.disabled = false;
@@ -2584,7 +2530,6 @@ class Game {
             for (let pt of points) {
                 str += this.grid[pt.r][pt.c].letter;
             }
-            this.currentWordString = str;
 
             const hintsDisplay = document.getElementById('hints-display');
             if (hintsDisplay) hintsDisplay.innerText = str ? str : "Connect to form a word!";

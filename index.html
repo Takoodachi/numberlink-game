@@ -23,7 +23,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Outfit:wght@400;600;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 
     <!-- Bump ?v= on both style.css and script.js whenever CSS or JS changes, so browsers skip stale caches -->
-    <link rel="stylesheet" href="style.css?v=7">
+    <link rel="stylesheet" href="style.css?v=9">
 
     <!-- Three.js for the 3D lobby (lobby3d.js), pinned; addons import from the bare "three" name -->
     <script type="importmap">
@@ -45,11 +45,19 @@
         }
     </script>
 
-    <div id="web-splash" class="web-splash">
-        <div class="splash-logo"></div>
-        <div class="loading-dots">
-            <span>.</span><span>.</span><span>.</span>
+    <div id="web-splash" class="web-splash lobby" role="status" aria-label="Loading Number Link">
+        <div class="splash-board" aria-hidden="true">
+            <svg viewBox="0 0 4 4">
+                <path class="splash-cells" d="M0 0H4V4H0Z M1 0V4 M2 0V4 M3 0V4 M0 1H4 M0 2H4 M0 3H4"/>
+                <path class="splash-path" pathLength="1" d="M0.5 0.5H3.5V1.5H0.5V2.5H3.5V3.5H0.5"/>
+                <circle class="splash-node" cx="0.5" cy="0.5" r="0.3"/>
+                <circle class="splash-node" cx="0.5" cy="3.5" r="0.3"/>
+            </svg>
         </div>
+        <div class="splash-title">NUMBER LINK</div>
+        <div class="splash-sub">Six modes · One board</div>
+        <div class="splash-bar" aria-hidden="true"><span></span></div>
+        <div class="splash-status">Loading the arcade</div>
     </div>
 
     <button id="theme-toggle" title="Toggle Dark Mode">🌙</button>
@@ -114,23 +122,6 @@
                 <button id="close-rules-btn">✖</button>
             </div>
             <div class="rules-body" id="dynamic-rules-content"></div>
-        </div>
-    </div>
-
-    <div id="level-modal" class="modal-overlay">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2>Select Level</h2>
-                <button id="close-level-btn">✖</button>
-            </div>
-
-            <div class="search-container">
-                <input type="number" id="level-search" class="level-search-input" placeholder="Search level..." min="1">
-                <button id="level-search-btn" class="level-search-btn" title="Search">➔</button>
-            </div>
-
-            <div id="level-grid">
-            </div>
         </div>
     </div>
 
@@ -278,7 +269,7 @@
     <button id="auth-btn" class="game-btn btn-secondary auth-global"></button>
 
     <div id="game-section">
-        <button id="level-panel-btn" class="game-btn btn-secondary leaderboard-top-left" title="Browse Levels">☰ Levels</button>
+        <button id="level-panel-btn" class="game-btn btn-secondary levels-corner-btn" title="Browse Levels">☰ Levels</button>
         <header>
             <div class="title-row" title="Back to Game Modes">
                 <h1 id="main-game-title">Number Link</h1>
@@ -313,7 +304,7 @@
 
     <div id="contact-corner" class="contact-corner"></div>
     <canvas id="confetti-canvas"></canvas>
-    <script type="module" src="script.js?v=7"></script>
+    <script type="module" src="script.js?v=9"></script>
 </body>
 
 </html>

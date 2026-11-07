@@ -4,6 +4,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 // 3D lobby: a rainy neon street of arcade cabinets, one per mode.
 // Rendering only; Game owns the focused index, input and the info card.
@@ -13,6 +14,11 @@ const CAB_X = 1.7;   // cabinets stand this far off the street center
 const TILT = -0.22;  // cabinet yaw (radians); negative turns them slightly outward so the side profile shows
 const CAB_W = 1.3;   // cabinet width
 const BG = '#05060e';
+// Side-art texture mapping (profile units -> texture); ART_FLIP mirrors it for the +x panel
+const ART_REPEAT = 1 / 1.25, ART_OFFSET = 0.47 / 1.25;
+const ART_FLIP = (1 - 2 * ART_OFFSET) / ART_REPEAT;
+// Adaptive resolution limits and step
+const MIN_RATIO = 0.6, RATIO_STEP = 0.15;
 
 // Even-index cabinets stand on the right of the street (Game puts the card on the left)
 const sideOf = (i) => (i % 2 === 0 ? 1 : -1);
@@ -40,8 +46,12 @@ export async function createLobbyScene(canvas, modes, { onPick, onHover } = {}) 
     // Phones and low-core machines get less rain, fewer stars and a lower resolution
     const low = Math.min(window.innerWidth, window.innerHeight) < 700 || (navigator.hardwareConcurrency || 8) <= 4;
 
-    const renderer = new THREE.WebGLRenderer({ canvas, antialias: !low });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, low ? 1.25 : 1.5));
+    // No antialias: the scene renders through the composer's own targets, so canvas MSAA only cost time
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
+    // Resolution starts at up to 1.25x (1x on low-power devices) and adapts to hold 60 FPS (see frame())
+    const maxRatio = Math.min(window.devicePixelRatio || 1, low ? 1 : 1.25);
+    let ratio = maxRatio;
+    renderer.setPixelRatio(ratio);
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(BG);
@@ -56,8 +66,16 @@ export async function createLobbyScene(canvas, modes, { onPick, onHover } = {}) 
     // Bloom makes every bright surface (screens, neon, windows) glow
     const composer = new EffectComposer(renderer);
     composer.addPass(new RenderPass(scene, camera));
-    composer.addPass(new UnrealBloomPass(new THREE.Vector2(256, 256), 0.7, 0.4, 0.62));
+    // Bloom works at half resolution: it's a blur, so it looks the same for a quarter of the pixels
+    const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.7, 0.4, 0.62);
+    const setBloomSize = bloom.setSize.bind(bloom);
+    bloom.setSize = (w, h) => setBloomSize(Math.ceil(w / 2), Math.ceil(h / 2));
+    composer.addPass(bloom);
     composer.addPass(new OutputPass());
+
+    // One light follows the focused cabinet (a light per cabinet made every lit pixel evaluate seven)
+    const focusLight = new THREE.PointLight('#ffffff', 5, 7);
+    scene.add(focusLight);
 
     const glowTex = canvasTexture(128, 128, (ctx, w) => {
         const g = ctx.createRadialGradient(w / 2, w / 2, 0, w / 2, w / 2, w / 2);
@@ -75,7 +93,7 @@ export async function createLobbyScene(canvas, modes, { onPick, onHover } = {}) 
         addNumberLink(scene, modes, glowTex),
         addTraffic(scene, glowTex),
         addRain(scene, camera, low ? 260 : 600),
-        addArcadeHall(scene, glowTex),
+        addArcadeHall(scene),
     ];
     const cabinets = modes.map((m, i) => makeCabinet(scene, m, i, glowTex));
 
@@ -86,17 +104,16 @@ export async function createLobbyScene(canvas, modes, { onPick, onHover } = {}) 
         pointer.y = (e.clientY / window.innerHeight) * 2 - 1;
     });
 
-    // Clicking a cabinet (any of its parts) picks that mode
+    // Clicking a cabinet picks that mode; each cabinet has one invisible box to test against
     const raycaster = new THREE.Raycaster();
-    raycaster.params.Line.threshold = 0.02;
     const ndc = new THREE.Vector2();
+    const hitBoxes = cabinets.map((c) => c.hit);
     const cabinetAt = (e) => {
         const rect = canvas.getBoundingClientRect();
         ndc.set(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
         raycaster.setFromCamera(ndc, camera);
-        let hit = raycaster.intersectObjects(cabinets.map((c) => c.group), true)[0]?.object;
-        while (hit && hit.userData.index === undefined) hit = hit.parent;
-        return hit ? hit.userData.index : -1;
+        const hit = raycaster.intersectObjects(hitBoxes, false)[0];
+        return hit ? hit.object.parent.userData.index : -1;
     };
     let hovering = false;
     canvas.addEventListener('pointermove', (e) => {
@@ -143,8 +160,38 @@ export async function createLobbyScene(canvas, modes, { onPick, onHover } = {}) 
         camera.lookAt(look[0], look[1], look[2]);
     }
 
+    // Adaptive resolution: judge every half second; if over a quarter of frames missed 50 FPS, step the
+    // pixel ratio down (and never climb back to that ratio this visit); after 5 s of smooth frames, step up
+    let judgeAt = 0, calmSince = 0, frames = 0, slowFrames = 0, ceiling = maxRatio;
+    const setRatio = (r) => {
+        ratio = Math.round(r * 100) / 100;
+        renderer.setPixelRatio(ratio);
+        composer.setPixelRatio(ratio);
+    };
+    function adaptResolution(now, frameSec) {
+        // Long gaps mean the tab was hidden or throttled, not that rendering is slow
+        if (frameSec > 0.25 || document.hidden) return;
+        frames++;
+        if (frameSec > 0.02) slowFrames++;
+        if (now < judgeAt) return;
+        const slowShare = slowFrames / frames;
+        frames = slowFrames = 0;
+        judgeAt = now + 500;
+        if (slowShare > 0.25 && ratio > MIN_RATIO) {
+            ceiling = ratio - RATIO_STEP;
+            setRatio(Math.max(MIN_RATIO, ratio - RATIO_STEP));
+            calmSince = now;
+        } else if (slowShare > 0.05) {
+            calmSince = now;
+        } else if (now - calmSince > 5000 && ratio + 0.01 < ceiling) {
+            setRatio(Math.min(ceiling, ratio + RATIO_STEP));
+            calmSince = now;
+        }
+    }
+
     function frame(now) {
         raf = requestAnimationFrame(frame);
+        if (last) adaptResolution(now, (now - last) / 1000);
         const dt = last ? Math.min((now - last) / 1000, 0.1) : 0;
         last = now;
         const time = now / 1000;
@@ -155,6 +202,10 @@ export async function createLobbyScene(canvas, modes, { onPick, onHover } = {}) 
         pose(pos, time);
         for (const update of updaters) update(time, dt);
         cabinets.forEach((cab, i) => cab.update(time, Math.max(0, 1 - Math.abs(pos - i))));
+        const i0 = THREE.MathUtils.clamp(Math.floor(pos), 0, cabinets.length - 1);
+        const i1 = Math.min(i0 + 1, cabinets.length - 1), f = THREE.MathUtils.clamp(pos - i0, 0, 1);
+        focusLight.position.lerpVectors(cabinets[i0].lightPos, cabinets[i1].lightPos, f);
+        focusLight.color.lerpColors(cabinets[i0].accent, cabinets[i1].accent, f);
         composer.render(dt);
     }
 
@@ -178,6 +229,11 @@ export async function createLobbyScene(canvas, modes, { onPick, onHover } = {}) 
         start() {
             if (raf) return;
             last = 0;
+            // Re-probe the resolution each visit; skip judging the first 2 s (shader compiles, loading)
+            ceiling = maxRatio;
+            judgeAt = performance.now() + 2000;
+            calmSince = judgeAt;
+            frames = slowFrames = 0;
             resize();
             raf = requestAnimationFrame(frame);
         },
@@ -261,27 +317,30 @@ function makeCabinet(scene, m, i, glowTex) {
     cab.add(new THREE.Mesh(bodyGeo, bodyMat));
     const darkMat = new THREE.MeshStandardMaterial({ color: 0x0a0c18, roughness: 0.45, metalness: 0.6 });
 
-    // Side art: neon trim along the silhouette plus diagonal stripes inside it
+    // Side panels: neon trim along the silhouette and the mode's side art, each one draw call for both sides
     const outline = shape.getPoints(16);
     const center = outline.reduce((a, p) => a.add(p), new THREE.Vector2()).divideScalar(outline.length);
     const trimMat = new THREE.LineBasicMaterial({ color: accent.clone() });
+    const sideX = CAB_W / 2 + 0.036;
+    const trimPts = [];
+    for (const x of [-sideX, sideX]) {
+        outline.forEach((p, k) => {
+            const q = outline[(k + 1) % outline.length];
+            trimPts.push(new THREE.Vector3(x, p.y, p.x), new THREE.Vector3(x, q.y, q.x));
+        });
+    }
+    cab.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(trimPts), trimMat));
     const artGeo = new THREE.ShapeGeometry(new THREE.Shape(outline.map(p => p.clone().lerp(center, 0.14))));
     artGeo.rotateY(-Math.PI / 2);
-    const artTex = sideArtTexture(m, st.H);
-    for (const sx of [-1, 1]) {
-        const x = sx * (CAB_W / 2 + 0.036);
-        cab.add(new THREE.LineLoop(
-            new THREE.BufferGeometry().setFromPoints(outline.map(p => new THREE.Vector3(x, p.y, p.x))),
-            trimMat
-        ));
-        const art = new THREE.Mesh(artGeo, new THREE.MeshBasicMaterial({
-            map: sx < 0 ? artTex : mirrored(artTex), transparent: true, side: THREE.DoubleSide, depthWrite: false,
-        }));
-        art.position.x = x;
-        cab.add(art);
-    }
+    // The +x panel is seen from the other side, so flip its UVs to read the right way round
+    const rightArt = artGeo.clone().translate(sideX, 0, 0);
+    const uv = rightArt.attributes.uv;
+    for (let k = 0; k < uv.count; k++) uv.setX(k, ART_FLIP - uv.getX(k));
+    cab.add(new THREE.Mesh(mergeGeometries([artGeo.clone().translate(-sideX, 0, 0), rightArt]), new THREE.MeshBasicMaterial({
+        map: sideArtTexture(m, st.H), transparent: true, side: THREE.DoubleSide, depthWrite: false,
+    })));
 
-    // Screen on the leaning face, with a faint glass glare in front
+    // Screen on the leaning face
     const [tz, ty] = st.screenTop;
     const theta = Math.atan2(0.30 - tz, ty - 1.06);
     const size = Math.min(1.02, Math.hypot(0.30 - tz, ty - 1.06) * 0.94);
@@ -296,13 +355,7 @@ function makeCabinet(scene, m, i, glowTex) {
     const screen = new THREE.Mesh(new THREE.PlaneGeometry(size, size), new THREE.MeshBasicMaterial({ map: screenTex }));
     screen.position.copy(screenPos).addScaledVector(normal, 0.04);
     screen.rotation.x = -theta;
-    const glare = new THREE.Mesh(
-        new THREE.PlaneGeometry(size, size),
-        new THREE.MeshBasicMaterial({ map: glareTexture(), transparent: true, depthWrite: false })
-    );
-    glare.position.copy(screenPos).addScaledVector(normal, 0.05);
-    glare.rotation.x = -theta;
-    cab.add(screen, glare);
+    cab.add(screen);
 
     // Control panel on the sloped top; each mode has its own controller
     const front = [0.42 + st.jut, 0.97], back = [0.30, 1.06];
@@ -317,11 +370,7 @@ function makeCabinet(scene, m, i, glowTex) {
     door.position.set(0, 0.42, 0.45);
     const slotColor = new THREE.Color('#ff7a3c');
     const slotMat = new THREE.MeshBasicMaterial({ color: slotColor.clone() });
-    for (const x of [-0.1, 0.1]) {
-        const slot = new THREE.Mesh(new THREE.PlaneGeometry(0.05, 0.11), slotMat);
-        slot.position.set(x, 0.5, 0.48);
-        cab.add(slot);
-    }
+    cab.add(new THREE.Mesh(mergeGeometries([-0.1, 0.1].map((x) => new THREE.PlaneGeometry(0.05, 0.11).translate(x, 0.5, 0.48))), slotMat));
     const kick = new THREE.Mesh(new THREE.BoxGeometry(CAB_W - 0.1, 0.03, 0.02), new THREE.MeshBasicMaterial({ color: accent }));
     kick.position.set(0, 0.07, 0.46);
     cab.add(door, kick);
@@ -346,17 +395,22 @@ function makeCabinet(scene, m, i, glowTex) {
     );
     glow.rotation.x = -Math.PI / 2;
     glow.position.set(0, 0.02, 0.8);
-    glow.raycast = () => {};
     cab.userData.index = i;
-    const light = new THREE.PointLight(accent, 6, 7);
-    light.position.set(0, 1.6, 1.4);
-    cab.add(sign, topper, glow, light);
+    // Invisible box for click and hover tests: one cheap raycast target instead of every part
+    const hit = new THREE.Mesh(new THREE.BoxGeometry(1.5, st.H + 1.4, 1.4), new THREE.MeshBasicMaterial());
+    hit.position.set(0, (st.H + 1.4) / 2, 0.1);
+    hit.visible = false;
+    cab.add(sign, topper, glow, hit);
+    cab.updateMatrixWorld(true);
 
     const demoSec = (m.board.demoMs || 3000) / 1000;
     let flickerFrom = -10, attractStart = 0, lastPaint = 0, painted = true;
 
     return {
-        group: cab,
+        hit,
+        accent,
+        // Where the shared focus light sits when this cabinet is focused
+        lightPos: cab.localToWorld(new THREE.Vector3(0, 1.6, 1.4)),
         powerOn(time) {
             flickerFrom = time;
             attractStart = time;
@@ -364,7 +418,6 @@ function makeCabinet(scene, m, i, glowTex) {
         update(time, focus) {
             trimMat.color.copy(accent).multiplyScalar(0.5 + focus);
             glow.material.opacity = 0.12 + 0.18 * focus + 0.04 * Math.sin(time * 2 + i);
-            light.intensity = 1.5 + 3.5 * focus;
             slotMat.color.copy(slotColor).multiplyScalar(Math.sin(time * 2.5 + i) > 0 ? 1 : 0.35);
             // Power-on flicker: two short blinks in the first half second (stays under 3 flashes/s)
             const f = time - flickerFrom;
@@ -564,21 +617,34 @@ function buildPanel(kind, panel, accent, accent2, darkMat) {
             tips.forEach((tip, k) => { tip.material.emissiveIntensity = k === lit ? 1.2 : 0.15; });
         };
     }
-    // keyboard: three rows of keycaps, lit one at a time as if someone is typing
-    const keyGeo = new THREE.BoxGeometry(0.06, 0.022, 0.05);
-    const keys = [];
+    // keyboard: three rows of keycaps in one instanced mesh, lit one at a time as if someone is typing
+    const spots = [], colors = [];
     for (let row = 0; row < 3; row++) {
         for (let k = 0; k < 9 - row; k++) {
-            keys.push(add(keyGeo, glowMat(new THREE.Color(row === 1 && k === 3 ? accent2 : '#cfd6ff'), 0.12),
-                -0.36 + row * 0.035 + k * 0.08, 0.011, -0.075 + row * 0.065));
+            spots.push([-0.36 + row * 0.035 + k * 0.08, -0.075 + row * 0.065]);
+            colors.push(new THREE.Color(row === 1 && k === 3 ? accent2 : '#cfd6ff'));
         }
     }
+    const keys = new THREE.InstancedMesh(new THREE.BoxGeometry(0.06, 0.022, 0.05), new THREE.MeshBasicMaterial(), spots.length);
+    keys.frustumCulled = false;
+    panel.add(keys);
+    const dummy = new THREE.Object3D(), tint = new THREE.Color();
+    const setKey = (k, pressed) => {
+        dummy.position.set(spots[k][0], pressed ? 0.004 : 0.011, spots[k][1]);
+        dummy.updateMatrix();
+        keys.setMatrixAt(k, dummy.matrix);
+        keys.setColorAt(k, tint.copy(colors[k]).multiplyScalar(pressed ? 1 : 0.3));
+    };
+    spots.forEach((_, k) => setKey(k, false));
+    let lit = -1;
     return (time) => {
-        const lit = Math.floor(time * 4) % keys.length;
-        keys.forEach((key, k) => {
-            key.material.emissiveIntensity = k === lit ? 1.0 : 0.12;
-            key.position.y = k === lit ? 0.004 : 0.011;
-        });
+        const next = Math.floor(time * 4) % spots.length;
+        if (next === lit) return;
+        if (lit >= 0) setKey(lit, false);
+        setKey(next, true);
+        lit = next;
+        keys.instanceMatrix.needsUpdate = true;
+        keys.instanceColor.needsUpdate = true;
     };
 }
 
@@ -777,28 +843,9 @@ function sideArtTexture(m, H) {
             }
         }
     });
-    tex.repeat.set(1 / 1.25, 1 / H);
-    tex.offset.set(0.47 / 1.25, 0);
+    tex.repeat.set(ART_REPEAT, 1 / H);
+    tex.offset.set(ART_OFFSET, 0);
     return tex;
-}
-
-// The +x side is seen from the other direction, so flip it horizontally to read the right way round
-function mirrored(tex) {
-    const copy = tex.clone();
-    copy.repeat.x = -tex.repeat.x;
-    copy.offset.x = 1 - tex.offset.x;
-    return copy;
-}
-
-function glareTexture() {
-    return canvasTexture(64, 64, (ctx, w) => {
-        const g = ctx.createLinearGradient(0, 0, w, w);
-        g.addColorStop(0, 'rgba(255, 255, 255, 0.14)');
-        g.addColorStop(0.45, 'rgba(255, 255, 255, 0.02)');
-        g.addColorStop(1, 'rgba(255, 255, 255, 0)');
-        ctx.fillStyle = g;
-        ctx.fillRect(0, 0, w, w);
-    });
 }
 
 // Stars and a moon that follow the camera so they read as infinitely far away
@@ -883,27 +930,26 @@ function addStreetLamps(scene, glowTex) {
     const postGeo = new THREE.CylinderGeometry(0.05, 0.07, 4.2, 10);
     const armGeo = new THREE.BoxGeometry(0.8, 0.05, 0.05);
     const bulbGeo = new THREE.SphereGeometry(0.11, 12, 8);
-    const poolGeo = new THREE.PlaneGeometry(3.2, 3.2);
+    const poolGeo = new THREE.PlaneGeometry(3.2, 3.2).rotateX(-Math.PI / 2);
+    const posts = [], bulbs = [], pools = [];
     let failing = null;
 
     for (let k = 0; k < 9; k++) {
         for (const side of [-1, 1]) {
-            const lamp = new THREE.Group();
-            lamp.position.set(side * 4.4, 0, 3.5 - k * SPACING);
-            const post = new THREE.Mesh(postGeo, postMat);
-            post.position.y = 2.1;
-            const arm = new THREE.Mesh(armGeo, postMat);
-            arm.position.set(-side * 0.38, 4.15, 0);
-            const bulb = new THREE.Mesh(bulbGeo, bulbMat);
-            bulb.position.set(-side * 0.75, 4.05, 0);
-            const pool = new THREE.Mesh(poolGeo, poolMat);
-            pool.rotation.x = -Math.PI / 2;
-            pool.position.set(-side * 0.75, 0.02, 0);
-            lamp.add(post, arm, bulb, pool);
-            scene.add(lamp);
-            if (k === 2 && side > 0) failing = [bulb, pool];
+            const x = side * 4.4, z = 3.5 - k * SPACING, bx = x - side * 0.75;
+            posts.push(postGeo.clone().translate(x, 2.1, z), armGeo.clone().translate(x - side * 0.38, 4.15, z));
+            const bulb = bulbGeo.clone().translate(bx, 4.05, z);
+            const pool = poolGeo.clone().translate(bx, 0.02, z);
+            if (k === 2 && side > 0) failing = [new THREE.Mesh(bulb, bulbMat), new THREE.Mesh(pool, poolMat)];
+            else { bulbs.push(bulb); pools.push(pool); }
         }
     }
+    scene.add(
+        new THREE.Mesh(mergeGeometries(posts), postMat),
+        new THREE.Mesh(mergeGeometries(bulbs), bulbMat),
+        new THREE.Mesh(mergeGeometries(pools), poolMat),
+        ...failing,
+    );
     // Two short drop-outs every few seconds (stays under 3 flashes/s)
     return (time) => {
         const f = time % 3.1;
@@ -933,15 +979,13 @@ function addSkyline(scene) {
     const beaconMat = new THREE.MeshBasicMaterial({ color: '#ff3b3b' });
     const beaconGeo = new THREE.SphereGeometry(0.18, 8, 6);
     const flickering = [];
-    let beacons = [];
+    const towers = [], beacons = [[], []];
 
     for (let i = 0; i < 44; i++) {
         const side = i % 2 === 0 ? 1 : -1;
         const w = 3 + Math.random() * 4, h = 6 + Math.random() * 18, d = 3 + Math.random() * 4;
         const x = side * (8 + w / 2 + Math.random() * 5), z = 8 - Math.floor(i / 2) * 3.6;
-        const tower = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), towerMat);
-        tower.position.set(x, h / 2, z);
-        scene.add(tower);
+        towers.push(new THREE.BoxGeometry(w, h, d).translate(x, h / 2, z));
 
         if (i % 3 === 0) {
             // Blade sign sticking out from the street-side corner so it faces the camera
@@ -955,16 +999,18 @@ function addSkyline(scene) {
             scene.add(sign);
             if (flickering.length < 2) flickering.push(sign);
         }
-        if (h > 17) {
-            const beacon = new THREE.Mesh(beaconGeo, beaconMat);
-            beacon.position.set(x, h + 0.3, z);
-            scene.add(beacon);
-            beacons.push(beacon);
-        }
+        if (h > 17) beacons[i % 2].push(beaconGeo.clone().translate(x, h + 0.3, z));
     }
+    scene.add(new THREE.Mesh(mergeGeometries(towers), towerMat));
+    // Two groups of rooftop beacons blinking in turn
+    const beaconGroups = beacons.filter((list) => list.length).map((list) => {
+        const mesh = new THREE.Mesh(mergeGeometries(list), beaconMat);
+        scene.add(mesh);
+        return mesh;
+    });
 
     return (time) => {
-        beacons.forEach((b, k) => { b.visible = (time + k * 0.4) % 1.6 < 0.8; });
+        beaconGroups.forEach((b, k) => { b.visible = (time + k * 0.8) % 1.6 < 0.8; });
         flickering.forEach((sign, k) => {
             const f = (time + k * 1.7) % 4.3;
             sign.visible = !((f > 0 && f < 0.09) || (f > 0.28 && f < 0.36));
@@ -972,8 +1018,9 @@ function addSkyline(scene) {
     };
 }
 
-// The street ends at an arcade hall: a neon gateway, plaza props, and the INSERT COIN billboard on the roof
-function addArcadeHall(scene, glowTex) {
+// The street ends at an arcade hall: a neon gateway, plaza props, and the INSERT COIN billboard on the roof.
+// Static parts that share a material are merged so the whole hall costs a handful of draw calls.
+function addArcadeHall(scene) {
     const front = -SPACING * 5 - 26; // hall facade, well past the last cabinet
     const hall = new THREE.Group();
     hall.position.z = front;
@@ -986,19 +1033,39 @@ function addArcadeHall(scene, glowTex) {
         parent.add(mesh);
         return mesh;
     };
-    const outline = (parent, geo, color, x, y, z) => {
-        const lines = new THREE.LineSegments(new THREE.EdgesGeometry(geo), new THREE.LineBasicMaterial({ color }));
-        lines.position.set(x, y, z);
-        parent.add(lines);
-    };
+    const at = (geo, x, y, z) => geo.clone().translate(x, y, z);
+    const edges = (geo, x, y, z) => new THREE.EdgesGeometry(geo).translate(x, y, z);
+    const gateZ = 14;               // gateway arch, in front of the hall
+    const claw = [-4.4, 0, 1.2];    // claw machine position
 
-    // Building: a wide block with a neon outline and two light strips across the front
+    // Dark structure: building, billboard posts, gateway pillars, vending boxes, claw machine base and roof
     const bodyGeo = new THREE.BoxGeometry(18, 8, 6);
-    add(hall, bodyGeo, dark, 0, 4, -3);
-    outline(hall, bodyGeo, '#ff4fd8', 0, 4, -3);
-    for (const y of [5.6, 6.5]) add(hall, new THREE.BoxGeometry(17.4, 0.06, 0.06), basic('#46e8ff'), 0, y, 0.03);
+    const pillarGeo = new THREE.BoxGeometry(0.4, 5.5, 0.4);
+    const clawBaseGeo = new THREE.BoxGeometry(1.2, 0.9, 1.2);
+    const glassGeo = new THREE.BoxGeometry(1.2, 1.3, 1.2);
+    const postGeo = new THREE.CylinderGeometry(0.12, 0.12, 2.2, 8);
+    const vendGeo = new THREE.BoxGeometry(1.1, 2.1, 0.8);
+    hall.add(new THREE.Mesh(mergeGeometries([
+        at(bodyGeo, 0, 4, -3),
+        at(postGeo, -4.5, 9.1, -0.8), at(postGeo, 4.5, 9.1, -0.8),
+        at(pillarGeo, -4.2, 2.75, gateZ), at(pillarGeo, 4.2, 2.75, gateZ),
+        at(vendGeo, 4.2, 1.05, 1), at(vendGeo, 5.5, 1.05, 1),
+        at(clawBaseGeo, claw[0], 0.45, claw[2]),
+        at(new THREE.BoxGeometry(1.2, 0.3, 1.2), claw[0], 2.35, claw[2]),
+    ]), dark));
 
-    // Glowing open entrance under a striped awning, lighting the plaza
+    // Neon outlines and light strips
+    hall.add(
+        new THREE.LineSegments(edges(bodyGeo, 0, 4, -3), new THREE.LineBasicMaterial({ color: '#ff4fd8' })),
+        new THREE.LineSegments(edges(clawBaseGeo, claw[0], 0.45, claw[2]), new THREE.LineBasicMaterial({ color: '#ffd166' })),
+        new THREE.LineSegments(mergeGeometries([
+            edges(pillarGeo, -4.2, 2.75, gateZ), edges(pillarGeo, 4.2, 2.75, gateZ), edges(glassGeo, claw[0], 1.55, claw[2]),
+        ]), new THREE.LineBasicMaterial({ color: '#46e8ff' })),
+    );
+    const strip = new THREE.BoxGeometry(17.4, 0.06, 0.06);
+    hall.add(new THREE.Mesh(mergeGeometries([at(strip, 0, 5.6, 0.03), at(strip, 0, 6.5, 0.03)]), basic('#46e8ff')));
+
+    // Glowing open entrance under a striped awning
     add(hall, new THREE.PlaneGeometry(4.2, 3.2), basic('#ffffff', {
         map: canvasTexture(256, 196, (ctx, w, h) => {
             const g = ctx.createLinearGradient(0, 0, 0, h);
@@ -1021,46 +1088,6 @@ function addArcadeHall(scene, glowTex) {
             }
         }),
     }), 0, 3.45, 0.6);
-    const doorLight = new THREE.PointLight('#ffb08a', 10, 16);
-    doorLight.position.set(0, 2.4, 2.5);
-    hall.add(doorLight);
-
-    // The INSERT COIN billboard on two posts on the roof; its color slowly shifts
-    const billboard = add(hall, new THREE.PlaneGeometry(14, 4.2), new THREE.MeshBasicMaterial({
-        map: canvasTexture(1024, 308, (ctx, w, h) => {
-            ctx.fillStyle = 'rgba(8, 10, 24, 0.85)';
-            ctx.fillRect(0, 0, w, h);
-            ctx.strokeStyle = '#ffffff';
-            ctx.lineWidth = 8;
-            ctx.strokeRect(10, 10, w - 20, h - 20);
-            ctx.fillStyle = '#ffffff';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.font = '900 120px Orbitron, sans-serif';
-            ctx.fillText('INSERT COIN', w / 2, h * 0.44);
-            ctx.font = '700 36px Outfit, sans-serif';
-            ctx.fillText('NUMBER LINK ARCADE  ·  SIX MODES  ·  ONE BOARD', w / 2, h * 0.78);
-        }),
-        transparent: true,
-        fog: false,
-    }), 0, 10.6, -0.6);
-    for (const x of [-4.5, 4.5]) add(hall, new THREE.CylinderGeometry(0.12, 0.12, 2.2, 8), dark, x, 9.1, -0.8);
-
-    // Slowly turning wireframe hologram above the roof
-    const holo = add(hall, new THREE.IcosahedronGeometry(1.8, 0), basic('#7ef0c4', { wireframe: true, fog: false }), 0, 15.2, -3);
-    const core = add(holo, new THREE.OctahedronGeometry(0.6), basic('#c39bff', { fog: false }), 0, 0, 0);
-
-    // Gateway arch over the street before the plaza; its name sign hangs on the hall front so it doesn't cover the billboard
-    const gate = new THREE.Group();
-    gate.position.z = 14;
-    hall.add(gate);
-    for (const x of [-4.2, 4.2]) {
-        const pillarGeo = new THREE.BoxGeometry(0.4, 5.5, 0.4);
-        add(gate, pillarGeo, dark, x, 2.75, 0);
-        outline(gate, pillarGeo, '#46e8ff', x, 2.75, 0);
-    }
-    add(gate, new THREE.TorusGeometry(4.2, 0.07, 8, 64, Math.PI), basic('#ff4fd8'), 0, 5.5, 0);
-    add(gate, new THREE.TorusGeometry(3.9, 0.04, 8, 64, Math.PI), basic('#46e8ff'), 0, 5.5, 0);
     add(hall, new THREE.PlaneGeometry(5, 1.1), basic('#ffffff', {
         map: canvasTexture(512, 116, (ctx, w, h) => {
             ctx.fillStyle = 'rgba(8, 10, 24, 0.9)';
@@ -1079,6 +1106,34 @@ function addArcadeHall(scene, glowTex) {
         transparent: true,
     }), 0, 4.6, 0.04);
 
+    // The INSERT COIN billboard on the roof; its color slowly shifts
+    const billboard = add(hall, new THREE.PlaneGeometry(14, 4.2), new THREE.MeshBasicMaterial({
+        map: canvasTexture(1024, 308, (ctx, w, h) => {
+            ctx.fillStyle = 'rgba(8, 10, 24, 0.85)';
+            ctx.fillRect(0, 0, w, h);
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 8;
+            ctx.strokeRect(10, 10, w - 20, h - 20);
+            ctx.fillStyle = '#ffffff';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.font = '900 120px Orbitron, sans-serif';
+            ctx.fillText('INSERT COIN', w / 2, h * 0.44);
+            ctx.font = '700 36px Outfit, sans-serif';
+            ctx.fillText('NUMBER LINK ARCADE  ·  SIX MODES  ·  ONE BOARD', w / 2, h * 0.78);
+        }),
+        transparent: true,
+        fog: false,
+    }), 0, 10.6, -0.6);
+
+    // Slowly turning wireframe hologram above the roof
+    const holo = add(hall, new THREE.IcosahedronGeometry(1.8, 0), basic('#7ef0c4', { wireframe: true, fog: false }), 0, 15.2, -3);
+    const core = add(holo, new THREE.OctahedronGeometry(0.6), basic('#c39bff', { fog: false }), 0, 0, 0);
+
+    // Gateway arcs over the street
+    add(hall, new THREE.TorusGeometry(4.2, 0.07, 8, 64, Math.PI), basic('#ff4fd8'), 0, 5.5, gateZ);
+    add(hall, new THREE.TorusGeometry(3.9, 0.04, 8, 64, Math.PI), basic('#46e8ff'), 0, 5.5, gateZ);
+
     // Neon rings on the plaza floor
     for (const [r, color] of [[5.6, '#46e8ff'], [4.4, '#ff4fd8']]) {
         const ring = add(hall, new THREE.RingGeometry(r, r + 0.12, 72), basic(color, {
@@ -1087,7 +1142,7 @@ function addArcadeHall(scene, glowTex) {
         ring.rotation.x = -Math.PI / 2;
     }
 
-    // Two drink vending machines to the right of the door
+    // Lit fronts of the two drink vending machines
     const vendFront = canvasTexture(128, 256, (ctx, w, h) => {
         ctx.fillStyle = '#10142e';
         ctx.fillRect(0, 0, w, h);
@@ -1105,23 +1160,12 @@ function addArcadeHall(scene, glowTex) {
         ctx.fillStyle = '#ff7a3c';
         ctx.fillRect(w / 2 - 20, h - 26, 40, 8);
     });
-    for (const x of [4.2, 5.5]) {
-        add(hall, new THREE.BoxGeometry(1.1, 2.1, 0.8), dark, x, 1.05, 1);
-        add(hall, new THREE.PlaneGeometry(0.95, 1.9), basic('#ffffff', { map: vendFront }), x, 1.05, 1.41);
-    }
+    const vendPlane = new THREE.PlaneGeometry(0.95, 1.9);
+    hall.add(new THREE.Mesh(mergeGeometries([at(vendPlane, 4.2, 1.05, 1.41), at(vendPlane, 5.5, 1.05, 1.41)]), basic('#ffffff', { map: vendFront })));
 
-    // Claw machine to the left of the door; the claw roams and drops for a prize
-    const claw = new THREE.Group();
-    claw.position.set(-4.4, 0, 1.2);
-    hall.add(claw);
-    const cabGeo = new THREE.BoxGeometry(1.2, 0.9, 1.2);
-    add(claw, cabGeo, dark, 0, 0.45, 0);
-    outline(claw, cabGeo, '#ffd166', 0, 0.45, 0);
-    const glassGeo = new THREE.BoxGeometry(1.2, 1.3, 1.2);
-    add(claw, glassGeo, basic('#9fb4ff', { transparent: true, opacity: 0.08, depthWrite: false }), 0, 1.55, 0);
-    outline(claw, glassGeo, '#46e8ff', 0, 1.55, 0);
-    add(claw, new THREE.BoxGeometry(1.2, 0.3, 1.2), dark, 0, 2.35, 0);
-    add(claw, new THREE.PlaneGeometry(1.1, 0.24), basic('#ffffff', {
+    // Claw machine glass, sign and prizes; the claw roams and drops for a prize
+    add(hall, glassGeo, basic('#9fb4ff', { transparent: true, opacity: 0.08, depthWrite: false }), claw[0], 1.55, claw[2]);
+    add(hall, new THREE.PlaneGeometry(1.1, 0.24), basic('#ffffff', {
         map: canvasTexture(256, 56, (ctx, w, h) => {
             ctx.fillStyle = '#1a1030';
             ctx.fillRect(0, 0, w, h);
@@ -1131,19 +1175,19 @@ function addArcadeHall(scene, glowTex) {
             ctx.textBaseline = 'middle';
             ctx.fillText('PRIZES', w / 2, h / 2 + 2);
         }),
-    }), 0, 2.35, 0.61);
-    ['#ff4fd8', '#46e8ff', '#ffd166', '#7ef0c4', '#8fa8ff', '#ff7a3c'].forEach((color, k) => {
-        add(claw, new THREE.SphereGeometry(0.12, 12, 8), basic(color), -0.35 + (k % 3) * 0.35, 1.02, -0.2 + Math.floor(k / 3) * 0.4);
-    });
-    const grabber = new THREE.Group();
-    claw.add(grabber);
-    add(grabber, new THREE.CylinderGeometry(0.012, 0.012, 0.5, 6), basic('#cfd6ff'), 0, 0.25, 0);
-    for (let k = 0; k < 3; k++) {
-        const prong = add(grabber, new THREE.BoxGeometry(0.03, 0.14, 0.03), basic('#cfd6ff'), 0, -0.03, 0);
-        const a = (k / 3) * Math.PI * 2;
-        prong.position.x = Math.cos(a) * 0.06;
-        prong.position.z = Math.sin(a) * 0.06;
-    }
+    }), claw[0], 2.35, claw[2] + 0.61);
+    const prize = new THREE.SphereGeometry(0.12, 12, 8);
+    hall.add(new THREE.Mesh(mergeGeometries(['#ff4fd8', '#46e8ff', '#ffd166', '#7ef0c4', '#8fa8ff', '#ff7a3c'].map((color, k) => {
+        const g = at(prize, claw[0] - 0.35 + (k % 3) * 0.35, 1.02, claw[2] - 0.2 + Math.floor(k / 3) * 0.4);
+        const c = new THREE.Color(color);
+        g.setAttribute('color', new THREE.Float32BufferAttribute(Array.from({ length: g.attributes.position.count }, () => [c.r, c.g, c.b]).flat(), 3));
+        return g;
+    })), new THREE.MeshBasicMaterial({ vertexColors: true })));
+    const prong = new THREE.BoxGeometry(0.03, 0.14, 0.03);
+    const grabber = add(hall, mergeGeometries([
+        at(new THREE.CylinderGeometry(0.012, 0.012, 0.5, 6), 0, 0.25, 0),
+        ...[0, 1, 2].map((k) => at(prong, Math.cos((k / 3) * Math.PI * 2) * 0.06, -0.03, Math.sin((k / 3) * Math.PI * 2) * 0.06)),
+    ]), basic('#cfd6ff'), claw[0], 1.9, claw[2]);
 
     return (time) => {
         billboard.material.color.setHSL((0.62 + time * 0.03) % 1, 0.7, 0.55);
@@ -1152,8 +1196,8 @@ function addArcadeHall(scene, glowTex) {
         core.rotation.y = -time * 0.8;
         // Claw: roam for 4 s, then drop and rise over 2 s
         const cycle = time % 6;
-        grabber.position.x = Math.sin(time * 0.6) * 0.4;
-        grabber.position.z = Math.cos(time * 0.45) * 0.35;
+        grabber.position.x = claw[0] + Math.sin(time * 0.6) * 0.4;
+        grabber.position.z = claw[2] + Math.cos(time * 0.45) * 0.35;
         grabber.position.y = cycle < 4 ? 1.9 : 1.9 - Math.sin(((cycle - 4) / 2) * Math.PI) * 0.65;
     };
 }
